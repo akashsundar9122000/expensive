@@ -1,0 +1,71 @@
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <div class="logo-icon">
+                <i class="ph-bold ph-wallet"></i>
+            </div>
+            <h2>EXPENSIFY</h2>
+            <p>Create your account and start tracking.</p>
+        </div>
+
+        <form class="auth-form" (ngSubmit)="onSubmit()">
+            <div class="form-group">
+                <label for="name">Full Name</label>
+                <div class="input-wrapper">
+                    <i class="ph ph-user"></i>
+                    <input type="text" id="name" name="name" [(ngModel)]="name" placeholder="John Doe" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email</label>
+                <div class="input-wrapper">
+                    <i class="ph ph-envelope"></i>
+                    <input type="email" id="email" name="email" [(ngModel)]="email" placeholder="john@example.com"
+                        required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <div class="input-wrapper">
+                    <i class="ph ph-lock"></i>
+                    <input type="password" id="password" name="password" [(ngModel)]="password" placeholder="••••••••"
+                        required>
+                </div>
+            </div>
+
+            <p class="error-text" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+            <button type="submit" class="auth-btn">Create Account</button>
+        </form>
+
+        <div class="auth-footer">
+            <p>Already have an account? <a routerLink="/login">Sign in</a></p>
+        </div>
+    </div>
+
+    <div class="auth-visual">
+        <div class="visual-content">
+            <div class="features-list">
+                <div class="feature-item">
+                    <div class="feature-icon"><i class="ph ph-chart-line"></i></div>
+                    <div class="feature-text">
+                        <h3>Smart Analytics</h3>
+                        <p>Get deep insights into your spending habits.</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon"><i class="ph ph-fingerprint"></i></div>
+                    <div class="feature-text">
+                        <h3>Secure & Private</h3>
+                        <p>Your data stays with you locally and securely.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+</div>

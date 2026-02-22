@@ -1,0 +1,75 @@
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <div class="logo-icon">
+                <i class="ph-bold ph-wallet"></i>
+            </div>
+            <h2>EXPENSIFY</h2>
+            <p>Welcome back! Please enter your details.</p>
+        </div>
+
+        <form class="auth-form" (ngSubmit)="onSubmit()">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <div class="input-wrapper">
+                    <i class="ph ph-envelope"></i>
+                    <input type="email" id="email" name="email" [(ngModel)]="email" placeholder="Enter your email"
+                        required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <div class="input-wrapper">
+                    <i class="ph ph-lock"></i>
+                    <input [type]="showPassword ? 'text' : 'password'" id="password" name="password"
+                        [(ngModel)]="password" placeholder="••••••••" required>
+                    <button type="button" class="password-toggle" (click)="showPassword = !showPassword">
+                        <i class="ph" [ngClass]="showPassword ? 'ph-eye-slash' : 'ph-eye'"></i>
+                    </button>
+                </div>
+            </div>
+
+            <p class="error-text" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+            <div class="form-options">
+                <label class="checkbox-container">
+                    <input type="checkbox">
+                    <span class="checkmark"></span>
+                    Remember me
+                </label>
+                <a href="#" class="forgot-password">Forgot password?</a>
+            </div>
+
+            <button type="submit" class="auth-btn">Sign In</button>
+
+            <button type="button" class="google-btn">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+                Sign in with Google
+            </button>
+        </form>
+
+        <div class="auth-footer">
+            <p>Don't have an account? <a routerLink="/signup">Sign up for free</a></p>
+        </div>
+    </div>
+
+    <div class="auth-visual">
+        <div class="visual-content">
+            <div class="quote-card">
+                <div class="quote-icon"><i class="ph-fill ph-quotes"></i></div>
+                <p>"The best way to track your expenses without any hassle. Simple, clean, and effective."</p>
+                <div class="quote-author">
+                    <div class="author-info" style="margin-left: 0;">
+                        <strong>User Community</strong>
+                        <span>Secure & Private</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Abstract Background Elements -->
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+</div>
