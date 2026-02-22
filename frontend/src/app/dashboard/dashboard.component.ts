@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ExpenseService } from '../services/expense.service';
@@ -15,7 +15,12 @@ import { RouterLink } from '@angular/router';
     templateUrl: './dashboard.component.html',
     styleUrl: './dashboard.component.css'
 })
-export class DashboardComponent implements OnInit {
+
+export class DashboardComponent implements OnInit, OnDestroy {
+    currentTime = '';
+    currentDate = '';
+    greeting = '';
+    private timerInterval: any;
     user$!: Observable<User | null>;
     stats$!: Observable<DashboardStats>;
     transactions$!: Observable<Transaction[]>;
@@ -46,13 +51,14 @@ export class DashboardComponent implements OnInit {
             if (user && user.bankAccounts && user.bankAccounts.length > 0 && !user.bankAccounts.includes(this.selectedBank)) {
                 this.selectedBank = user.bankAccounts[0];
             } else if (user && (!user.bankAccounts || user.bankAccounts.length === 0)) {
-                // Automatically add SBI as default if nothing exists
                 this.expenseService.addBank('SBI');
                 this.selectedBank = 'SBI';
             }
         });
 
-        // Close menus on click outside
+        this.updateDateTime();
+        this.timerInterval = setInterval(() => this.updateDateTime(), 60000);
+
         window.onclick = (event: any) => {
             if (!event.target.closest('.profile-dropdown') && !event.target.closest('.profile-menu')) {
                 this.showProfileMenu = false;
@@ -61,6 +67,26 @@ export class DashboardComponent implements OnInit {
                 this.showBankSelector = false;
             }
         };
+    }
+
+    ngOnDestroy(): void {
+        if (this.timerInterval) clearInterval(this.timerInterval);
+    }
+
+    private updateDateTime() {
+        const now = new Date();
+        const hours = now.getHours();
+        const minutes = now.getMinutes().toString().padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        const h12 = hours % 12 || 12;
+        this.currentTime = `${h12}:${minutes} ${ampm}`;
+
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        this.currentDate = `${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+
+        if (hours < 12) this.greeting = 'Good Morning';
+        else if (hours < 17) this.greeting = 'Good Afternoon';
+        else this.greeting = 'Good Evening';
     }
 
     private initForm() {

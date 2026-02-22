@@ -14,12 +14,12 @@
         <!-- Header -->
         <header class="top-header">
             <div class="header-left">
-                <h1>Hi, {{ (data.user?.name || '').split(' ')[0] || 'User' }} 👋</h1>
+                <h1>{{ greeting }}, {{ (data.user?.name || '').split(' ')[0] || 'User' }} 👋</h1>
                 <p>Track your all expense and transactions</p>
             </div>
 
             <div class="header-meta">
-                <span>11:11 PM | 31 June 2025 | IN</span>
+                <span>{{ currentTime }} | {{ currentDate }}</span>
             </div>
 
             <div class="header-right">

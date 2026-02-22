@@ -644,3 +644,50 @@ td b {
     color: var(--primary-blue) !important;
     font-weight: 600;
 }
+
+/* Search box dark mode */
+.search-box input {
+    background: var(--bg-card);
+    color: var(--text-dark);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .main-content {
+        margin-left: 0;
+    }
+
+    .top-header {
+        padding: 0 20px;
+        height: auto;
+        flex-wrap: wrap;
+        gap: 12px;
+        padding-top: 16px;
+        padding-bottom: 16px;
+    }
+
+    .header-meta {
+        display: none;
+    }
+
+    .search-box {
+        display: none;
+    }
+
+    .dashboard-body {
+        padding: 16px 20px;
+    }
+
+    .overview-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .charts-grid,
+    .tables-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .stat-body h3 {
+        font-size: 22px;
+    }
+}
