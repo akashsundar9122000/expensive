@@ -2,14 +2,12 @@
     "version": 2,
     "buildCommand": "cd frontend && npm run build",
     "outputDirectory": "frontend/dist/expense-tracker/browser",
-    "installCommand": "cd frontend && npm install",
-    "rewrites": [
-        {
-            "source": "/api/(.*)",
-            "destination": "http://localhost:8080/api/$1"
-        }
-    ],
+    "installCommand": "npm install && cd frontend && npm install",
     "routes": [
+        {
+            "src": "/api/(.*)",
+            "dest": "/api/$1"
+        },
         {
             "handle": "filesystem"
         },
