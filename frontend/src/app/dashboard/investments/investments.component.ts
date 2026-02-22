@@ -7,14 +7,14 @@ import { SidebarComponent } from '../../shared/sidebar/sidebar.component';
 import { FormsModule } from '@angular/forms';
 
 const INVESTMENT_TYPES = [
-  { value: 'Mutual Fund', icon: 'ph-chart-pie', color: '#8B5CF6', bg: '#F3E8FF' },
-  { value: 'Stock', icon: 'ph-trend-up', color: '#10B981', bg: '#ECFDF5' },
-  { value: 'Gold', icon: 'ph-currency-dollar', color: '#F59E0B', bg: '#FFF7ED' },
-  { value: 'Fixed Deposit', icon: 'ph-bank', color: '#3B82F6', bg: '#EFF6FF' },
-  { value: 'Crypto', icon: 'ph-currency-btc', color: '#F97316', bg: '#FFF7ED' },
-  { value: 'Real Estate', icon: 'ph-house', color: '#EF4444', bg: '#FEF2F2' },
-  { value: 'PPF', icon: 'ph-shield-check', color: '#06B6D4', bg: '#ECFEFF' },
-  { value: 'Other', icon: 'ph-dots-three-circle', color: '#64748B', bg: '#F8FAFC' },
+  { value: 'Mutual Fund', icon: 'ph-chart-pie', color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)' },
+  { value: 'Stock', icon: 'ph-trend-up', color: '#10B981', bg: 'rgba(16,185,129,0.1)' },
+  { value: 'Gold', icon: 'ph-currency-dollar', color: '#F59E0B', bg: 'rgba(245,158,11,0.1)' },
+  { value: 'Fixed Deposit', icon: 'ph-bank', color: '#3B82F6', bg: 'rgba(59,130,246,0.1)' },
+  { value: 'Crypto', icon: 'ph-currency-btc', color: '#F97316', bg: 'rgba(249,115,22,0.1)' },
+  { value: 'Real Estate', icon: 'ph-house', color: '#EF4444', bg: 'rgba(239,68,68,0.1)' },
+  { value: 'PPF', icon: 'ph-shield-check', color: '#06B6D4', bg: 'rgba(6,182,212,0.1)' },
+  { value: 'Other', icon: 'ph-dots-three-circle', color: '#64748B', bg: 'rgba(100,116,139,0.1)' },
 ];
 
 @Component({
@@ -48,17 +48,17 @@ const INVESTMENT_TYPES = [
         <div class="dashboard-body" *ngIf="data.stats">
           <!-- Summary Cards -->
           <div class="stats-grid">
-            <div class="card stat-card purple-card">
+            <div class="stat-card purple-card">
               <span class="card-label">Total Portfolio</span>
               <h3>₹{{ data.stats.totalInvestment | number:'1.2-2' }}</h3>
               <p class="card-sub">Across all investments</p>
             </div>
-            <div class="card stat-card green-card">
+            <div class="stat-card green-card">
               <span class="card-label">Bank Balance</span>
               <h3>₹{{ data.stats.balance | number:'1.2-2' }}</h3>
               <p class="card-sub">Available cash</p>
             </div>
-            <div class="card stat-card blue-card">
+            <div class="stat-card blue-card">
               <span class="card-label">Net Worth</span>
               <h3>₹{{ (data.stats.balance + data.stats.totalInvestment) | number:'1.2-2' }}</h3>
               <p class="card-sub">Balance + Portfolio</p>
@@ -66,8 +66,8 @@ const INVESTMENT_TYPES = [
           </div>
 
           <!-- Investment List -->
-          <div class="card investments-table">
-            <div class="flex-between" style="margin-bottom: 24px;">
+          <div class="card" style="padding: 28px;">
+            <div class="flex-between" style="margin-bottom: 20px;">
               <h3>Portfolio Breakdown</h3>
             </div>
             <div *ngIf="data.investments && data.investments.length > 0">
@@ -95,7 +95,7 @@ const INVESTMENT_TYPES = [
           </div>
 
           <!-- Category Breakdown -->
-          <div class="card" style="padding: 32px; margin-top: 24px;" *ngIf="data.investments && data.investments.length > 0">
+          <div class="card" style="padding: 28px; margin-top: 24px;" *ngIf="data.investments && data.investments.length > 0">
             <h3 style="margin-bottom: 24px;">By Category</h3>
             <div class="category-breakdown">
               <div class="category-row" *ngFor="let type of getUniqueTypes(data.investments)">
@@ -136,9 +136,9 @@ const INVESTMENT_TYPES = [
 
         <div class="form-group">
           <label>Name / Description</label>
-          <input type="text" [(ngModel)]="newInvestment.name" placeholder="e.g. Nifty 50 Index Fund, HDFC Flexi Cap">
+          <input type="text" [(ngModel)]="newInvestment.name" placeholder="e.g. Nifty 50 Index Fund">
         </div>
-        <div class="form-row">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
           <div class="form-group">
             <label>Amount (₹)</label>
             <input type="number" [(ngModel)]="newInvestment.amount" placeholder="0">
@@ -148,7 +148,7 @@ const INVESTMENT_TYPES = [
             <input type="number" [(ngModel)]="newInvestment.returnPct" placeholder="e.g. 12.5">
           </div>
         </div>
-        <button class="primary-btn" style="width: 100%; margin-top: 8px;" (click)="saveInvestment()"
+        <button class="primary-btn" style="width: 100%; justify-content: center; margin-top: 8px;" (click)="saveInvestment()"
           [disabled]="!newInvestment.name || !newInvestment.amount || newInvestment.amount <= 0">
           Save Investment
         </button>
@@ -156,61 +156,37 @@ const INVESTMENT_TYPES = [
     </div>
   `,
   styles: [`
-    .dashboard-layout { display: flex; min-height: 100vh; }
-    .main-content { flex: 1; margin-left: var(--sidebar-width); }
-    .top-header { height: 100px; display: flex; align-items: center; justify-content: space-between; padding: 0 40px; background: var(--bg-main); position: sticky; top: 0; z-index: 10; }
-    .header-left h1 { font-size: 24px; margin-bottom: 4px; }
-    .header-right { display: flex; align-items: center; gap: 16px; }
-    .fallback-header-avatar { width: 44px; height: 44px; border-radius: 50%; background: #F1F5F9; color: #64748B; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-    .primary-btn { padding: 12px 20px; background: var(--text-dark); color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
-    .dashboard-body { padding: 40px; }
-
-    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 32px; }
-    .stat-card { padding: 32px; border-radius: 20px; color: white; }
-    .card-label { font-size: 13px; opacity: 0.8; font-weight: 500; }
-    .stat-card h3 { font-size: 28px; font-weight: 800; margin: 12px 0 4px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 28px; }
+    .stat-card { padding: 28px; border-radius: 20px; color: white; }
+    .card-label { font-size: 12px; opacity: 0.85; font-weight: 500; }
+    .stat-card h3 { font-size: 26px; font-weight: 800; margin: 8px 0 4px; color: white; }
     .card-sub { font-size: 12px; opacity: 0.7; }
     .purple-card { background: linear-gradient(135deg, #9333ea, #7e22ce); }
     .green-card { background: linear-gradient(135deg, #10b981, #059669); }
     .blue-card { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
 
-    .investments-table { padding: 32px; }
-    .investment-row { display: flex; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--border-light); }
+    .investment-row { display: flex; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border-light); transition: background var(--transition-fast); }
+    .investment-row:hover { background: var(--bg-hover); margin: 0 -12px; padding: 14px 12px; border-radius: 12px; }
     .inv-type-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
     .inv-details { flex: 1; }
     .inv-details h4 { font-size: 15px; margin-bottom: 4px; }
     .type-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
-    .return-badge { background: #ECFDF5; color: #10B981; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px; }
-    .inv-amount { font-size: 16px; font-weight: 700; margin-right: 8px; }
-    .delete-btn { border: none; background: none; color: var(--text-muted); cursor: pointer; font-size: 18px; transition: color 0.2s; }
-    .delete-btn:hover { color: var(--danger-red); }
+    .return-badge { background: rgba(16, 185, 129, 0.1); color: #10B981; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px; }
+    .inv-amount { font-size: 16px; font-weight: 700; margin-right: 8px; color: var(--text-dark); }
 
-    .empty-state { text-align: center; padding: 60px; color: var(--text-muted); }
-    .empty-state i { font-size: 48px; opacity: 0.3; display: block; margin-bottom: 12px; }
-
-    .category-breakdown { display: flex; flex-direction: column; gap: 20px; }
+    .category-breakdown { display: flex; flex-direction: column; gap: 16px; }
     .category-row { display: flex; align-items: center; gap: 16px; }
-    .cat-info { display: flex; align-items: center; gap: 10px; width: 140px; font-weight: 500; font-size: 14px; }
+    .cat-info { display: flex; align-items: center; gap: 10px; width: 140px; font-weight: 500; font-size: 14px; color: var(--text-dark); }
     .cat-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-    .cat-bar-wrapper { flex: 1; height: 8px; background: #F1F5F9; border-radius: 4px; overflow: hidden; }
-    .cat-bar { height: 100%; border-radius: 4px; transition: width 0.4s ease; }
+    .cat-bar-wrapper { flex: 1; height: 8px; background: var(--bg-chip); border-radius: 4px; overflow: hidden; }
+    .cat-bar { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
     .cat-pct { font-size: 13px; font-weight: 600; width: 50px; text-align: right; color: var(--text-muted); }
 
-    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
-    .modal-card { background: white; border-radius: 24px; padding: 32px; width: 480px; max-height: 90vh; overflow-y: auto; }
-    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-    .close-btn { border: none; background: none; font-size: 24px; cursor: pointer; color: var(--text-muted); }
-
-    .investment-types-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
-    .type-option { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 8px; border-radius: 16px; border: 2px solid var(--border-light); cursor: pointer; transition: all 0.2s; font-size: 11px; font-weight: 600; text-align: center; }
+    .investment-types-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+    .type-option { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 6px; border-radius: 14px; border: 2px solid var(--border-light); cursor: pointer; transition: all 0.2s; font-size: 11px; font-weight: 600; text-align: center; color: var(--text-main); }
     .type-option:hover { border-color: var(--primary-blue); }
     .type-option.selected { border-color: var(--primary-blue); background: var(--primary-blue-light); }
     .type-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-
-    .form-group { margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px; }
-    .form-group label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
-    .form-group input { padding: 12px; border: 1px solid var(--border-light); border-radius: 12px; outline: none; font-size: 14px; }
-    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   `]
 })
 export class InvestmentsComponent implements OnInit {

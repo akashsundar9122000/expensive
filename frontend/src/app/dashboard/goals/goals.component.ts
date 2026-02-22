@@ -23,10 +23,9 @@ import { FormsModule } from '@angular/forms';
             <h1>Your Goals</h1>
             <p>Save for what matters most</p>
           </div>
-
           <div class="header-right">
-            <div class="profile-dropdown">
-              <img [src]="data.user?.avatar || 'https://i.pravatar.cc/150'" alt="Profile" class="profile-img">
+            <div class="fallback-header-avatar">
+              <i class="ph ph-user"></i>
             </div>
           </div>
         </header>
@@ -39,7 +38,7 @@ import { FormsModule } from '@angular/forms';
                 <div class="goal-info">
                   <span class="badge orange">Primary Goal</span>
                   <h2>{{ data.stats.goalName }}</h2>
-                  <p class="goal-desc">Luxury tech with the best features for productivity and entertainment.</p>
+                  <p class="goal-desc">Track your progress towards your savings target.</p>
                   
                   <div class="goal-stats-row">
                     <div class="stat-item">
@@ -51,7 +50,7 @@ import { FormsModule } from '@angular/forms';
                       <span class="value success">₹{{ data.stats.goalCollected | number:'1.0-0' }}</span>
                     </div>
                     <div class="stat-item">
-                      <span class="label">Left</span>
+                      <span class="label">Remaining</span>
                       <span class="value">₹{{ (data.stats.goalRequired - data.stats.goalCollected) | number:'1.0-0' }}</span>
                     </div>
                   </div>
@@ -61,11 +60,14 @@ import { FormsModule } from '@angular/forms';
                       <span class="currency-label">₹</span>
                       <input type="number" [(ngModel)]="fundAmount" placeholder="Enter amount">
                     </div>
-                    <button class="primary-btn" (click)="fundGoal()" [disabled]="!fundAmount || fundAmount <= 0 || fundAmount > data.stats.balance">
+                    <button class="primary-btn" (click)="fundGoal()" [disabled]="!fundAmount || fundAmount <= 0">
                       <i class="ph ph-hand-coins"></i> Fund Goal
                     </button>
                   </div>
-                  <p class="error-text" *ngIf="fundAmount > data.stats.balance">Insufficient balance (Available: ₹{{data.stats.balance | number}})</p>
+                  <div class="goal-complete" *ngIf="data.stats.goalCollected >= data.stats.goalRequired">
+                    <i class="ph ph-check-circle"></i>
+                    <span>Goal Achieved! 🎉</span>
+                  </div>
                 </div>
 
                 <div class="goal-visual">
@@ -91,9 +93,9 @@ import { FormsModule } from '@angular/forms';
               </div>
             </div>
 
-            <!-- Future Goals Grid -->
+            <!-- Suggested Goals -->
             <div class="future-goals">
-               <h3>Upcoming Goals</h3>
+               <h3>Suggested Goals</h3>
                <div class="goals-grid">
                   <div class="card secondary-goal">
                     <div class="goal-icon blue"><i class="ph ph-airplane"></i></div>
@@ -103,9 +105,21 @@ import { FormsModule } from '@angular/forms';
                   </div>
                   <div class="card secondary-goal">
                     <div class="goal-icon purple"><i class="ph ph-car"></i></div>
-                    <h4>Tesla Model 3</h4>
+                    <h4>New Car</h4>
                     <p>₹45,00,000</p>
                     <div class="mini-progress"><div class="fill" style="width: 5%"></div></div>
+                  </div>
+                  <div class="card secondary-goal">
+                    <div class="goal-icon green"><i class="ph ph-house"></i></div>
+                    <h4>Home Down Payment</h4>
+                    <p>₹25,00,000</p>
+                    <div class="mini-progress"><div class="fill" style="width: 8%"></div></div>
+                  </div>
+                  <div class="card secondary-goal">
+                    <div class="goal-icon orange"><i class="ph ph-graduation-cap"></i></div>
+                    <h4>Education Fund</h4>
+                    <p>₹10,00,000</p>
+                    <div class="mini-progress"><div class="fill" style="width: 20%"></div></div>
                   </div>
                </div>
             </div>
@@ -115,59 +129,61 @@ import { FormsModule } from '@angular/forms';
     </main>
   `,
   styles: [`
-    .dashboard-layout { display: flex; min-height: 100vh; }
-    .main-content { flex: 1; margin-left: var(--sidebar-width); }
-    .top-header { height: 100px; display: flex; align-items: center; justify-content: space-between; padding: 0 40px; background: var(--bg-main); position: sticky; top: 0; z-index: 10; }
-    .profile-img { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
-    .dashboard-body { padding: 40px; }
-
-    .goal-hero-card { padding: 48px; position: relative; overflow: hidden; }
-    .goal-hero-content { display: flex; gap: 64px; align-items: center; margin-bottom: 48px; }
+    .goal-hero-card { padding: 40px; position: relative; overflow: hidden; }
+    .goal-hero-content { display: flex; gap: 48px; align-items: center; margin-bottom: 40px; }
     
     .goal-info { flex: 1; }
-    .badge.orange { background: #FFF7ED; color: #F59E0B; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; display: inline-block; margin-bottom: 16px; }
-    .goal-info h2 { font-size: 32px; color: var(--text-dark); margin-bottom: 12px; }
-    .goal-desc { color: var(--text-muted); line-height: 1.6; margin-bottom: 32px; max-width: 400px; }
+    .goal-info h2 { font-size: 28px; color: var(--text-dark); margin-bottom: 12px; }
+    .goal-desc { color: var(--text-muted); line-height: 1.6; margin-bottom: 28px; max-width: 400px; }
 
-    .goal-stats-row { display: flex; gap: 40px; margin-bottom: 40px; }
+    .goal-stats-row { display: flex; gap: 36px; margin-bottom: 32px; }
     .stat-item { display: flex; flex-direction: column; gap: 4px; }
     .stat-item .label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
     .stat-item .value { font-size: 20px; font-weight: 700; color: var(--text-dark); }
     .stat-item .value.success { color: var(--success-green); }
 
-    .fund-action { display: flex; gap: 16px; align-items: center; }
+    .fund-action { display: flex; gap: 12px; align-items: center; }
     .fund-input-group { position: relative; }
-    .currency-label { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-weight: 600; }
-    .fund-input-group input { padding: 12px 16px 12px 32px; border-radius: 12px; border: 1px solid var(--border-light); font-size: 14px; width: 140px; outline: none; }
-    .primary-btn { padding: 12px 24px; background: var(--text-dark); color: white; border-radius: 12px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; }
-    .primary-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .error-text { color: var(--danger-red); font-size: 11px; margin-top: 8px; }
+    .currency-label { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-weight: 600; }
+    .fund-input-group input { padding: 12px 14px 12px 30px; border-radius: 12px; border: 1px solid var(--border-light); font-size: 14px; width: 140px; outline: none; background: var(--bg-input); color: var(--text-dark); }
+    .fund-input-group input:focus { border-color: var(--primary-blue); }
+
+    .goal-complete { display: flex; align-items: center; gap: 8px; padding: 12px 20px; background: rgba(16, 185, 129, 0.1); border-radius: 12px; color: var(--success-green); font-weight: 700; font-size: 16px; }
+    .goal-complete i { font-size: 24px; }
 
     .goal-visual { display: flex; justify-content: center; }
-    .circular-progress-large { width: 220px; height: 220px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: relative; }
-    .circular-progress-large::before { content: ""; position: absolute; width: 180px; height: 180px; background-color: white; border-radius: 50%; }
+    .circular-progress-large { width: 200px; height: 200px; border-radius: 50%; display: flex; align-items: center; justify-content: center; position: relative; }
+    .circular-progress-large::before { content: ""; position: absolute; width: 160px; height: 160px; background-color: var(--bg-card); border-radius: 50%; transition: background var(--transition-normal); }
     .progress-inner { position: relative; text-align: center; }
-    .progress-inner .percent { font-size: 40px; font-weight: 800; color: var(--text-dark); display: block; }
-    .progress-inner .subtext { font-size: 12px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+    .progress-inner .percent { font-size: 36px; font-weight: 800; color: var(--text-dark); display: block; }
+    .progress-inner .subtext { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
 
     /* Milestones */
-    .milestones { margin-top: 24px; }
-    .milestone-track { height: 8px; background: #F1F5F9; border-radius: 4px; position: relative; }
-    .milestone-progress { position: absolute; height: 100%; background: var(--warning-orange); border-radius: 4px; transition: width 0.5s ease; }
-    .milestone-point { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 16px; height: 16px; background: white; border: 3px solid #F1F5F9; border-radius: 50%; }
-    .milestone-label { position: absolute; top: 24px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
+    .milestones { margin-top: 16px; }
+    .milestone-track { height: 6px; background: var(--bg-chip); border-radius: 3px; position: relative; }
+    .milestone-progress { position: absolute; height: 100%; background: var(--warning-orange); border-radius: 3px; transition: width 0.6s ease; }
+    .milestone-point { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 14px; height: 14px; background: var(--bg-card); border: 3px solid var(--bg-chip); border-radius: 50%; }
+    .milestone-label { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 600; color: var(--text-muted); white-space: nowrap; }
 
     /* Future Goals */
-    .future-goals { margin-top: 48px; }
-    .future-goals h3 { margin-bottom: 24px; font-size: 18px; }
-    .goals-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
-    .secondary-goal { padding: 24px; display: flex; flex-direction: column; gap: 12px; }
+    .future-goals { margin-top: 40px; }
+    .future-goals h3 { margin-bottom: 20px; font-size: 18px; }
+    .goals-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+    .secondary-goal { padding: 24px; display: flex; flex-direction: column; gap: 10px; transition: transform var(--transition-fast); }
+    .secondary-goal:hover { transform: translateY(-3px); }
     .goal-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-    .goal-icon.blue { background: #EFF6FF; color: #3B82F6; }
-    .goal-icon.purple { background: #F3E8FF; color: #8B5CF6; }
-    .secondary-goal h4 { font-size: 16px; }
-    .mini-progress { height: 6px; background: #F1F5F9; border-radius: 3px; overflow: hidden; }
+    .goal-icon.blue { background: var(--primary-blue-light); color: var(--primary-blue); }
+    .goal-icon.purple { background: rgba(139, 92, 246, 0.1); color: #8B5CF6; }
+    .goal-icon.green { background: rgba(16, 185, 129, 0.1); color: #10B981; }
+    .goal-icon.orange { background: rgba(245, 158, 11, 0.1); color: #F59E0B; }
+    .secondary-goal h4 { font-size: 15px; }
+    .secondary-goal p { color: var(--text-muted); font-weight: 600; }
+    .mini-progress { height: 5px; background: var(--bg-chip); border-radius: 3px; overflow: hidden; }
     .mini-progress .fill { height: 100%; background: var(--primary-blue); border-radius: 3px; }
+
+    @media (max-width: 900px) {
+      .goal-hero-content { flex-direction: column; }
+    }
   `]
 })
 export class GoalsComponent implements OnInit {
@@ -183,13 +199,13 @@ export class GoalsComponent implements OnInit {
   }
 
   getGoalProgress(stats: DashboardStats): string {
-    const progress = (stats.goalCollected / stats.goalRequired) * 100;
+    const progress = Math.min((stats.goalCollected / stats.goalRequired) * 100, 100);
     return `${Math.round(progress)}%`;
   }
 
   getGoalGradient(stats: DashboardStats): string {
-    const progress = (stats.goalCollected / stats.goalRequired) * 100;
-    return `conic-gradient(var(--warning-orange) ${progress}%, #FFF7ED 0deg)`;
+    const progress = Math.min((stats.goalCollected / stats.goalRequired) * 100, 100);
+    return `conic-gradient(var(--warning-orange) ${progress}%, var(--bg-chip) 0deg)`;
   }
 
   fundGoal() {

@@ -124,6 +124,14 @@ export class ExpenseService {
         this.http.delete(`${this.apiUrl}/investments/${id}`).subscribe(() => { this.refreshAllData(); });
     }
 
-    fundGoal(amount: number) { this.refreshAllData(); }
+    fundGoal(amount: number) {
+        this.http.get<any>(`${this.apiUrl}/stats`).subscribe(data => {
+            const currentCollected = data.goalCollected || 0;
+            this.http.put(`${this.apiUrl}/preferences`, {
+                goalCollected: currentCollected + amount
+            }).subscribe(() => this.refreshAllData());
+        });
+    }
+
     updateBalance(bankName: string, amount: number) { this.refreshAllData(); }
 }

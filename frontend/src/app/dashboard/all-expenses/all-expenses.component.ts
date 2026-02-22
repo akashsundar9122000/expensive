@@ -33,20 +33,15 @@ import { FormsModule } from '@angular/forms';
               <button class="search-btn"><i class="ph ph-magnifying-glass"></i></button>
             </div>
 
-            <div class="profile-dropdown">
-                <img *ngIf="data.user?.avatar; else fallbackAvatar" [src]="data.user?.avatar" alt="Profile" class="profile-img">
-                <ng-template #fallbackAvatar>
-                  <div class="fallback-header-avatar">
-                    <i class="ph ph-user"></i>
-                  </div>
-                </ng-template>
+            <div class="fallback-header-avatar">
+              <i class="ph ph-user"></i>
             </div>
           </div>
         </header>
 
         <div class="dashboard-body">
           <div class="card table-card">
-            <div class="flex-between chart-header" style="margin-bottom: 24px;">
+            <div class="flex-between" style="margin-bottom: 20px;">
               <div class="filter-tabs">
                 <button class="filter-tab" 
                         [class.active]="(categoryFilter$ | async) === 'All'"
@@ -60,7 +55,16 @@ import { FormsModule } from '@angular/forms';
                 <button class="filter-tab" 
                         [class.active]="(categoryFilter$ | async) === 'Entertainment'"
                         (click)="updateCategory('Entertainment')">Entertainment</button>
+                <button class="filter-tab"
+                        [class.active]="(categoryFilter$ | async) === 'Transport'"
+                        (click)="updateCategory('Transport')">Transport</button>
+                <button class="filter-tab"
+                        [class.active]="(categoryFilter$ | async) === 'Bills'"
+                        (click)="updateCategory('Bills')">Bills</button>
               </div>
+              <button class="outline-btn export-btn" (click)="exportCSV(data.transactions || [])">
+                <i class="ph ph-download-simple"></i> Export CSV
+              </button>
             </div>
 
             <div class="table-container">
@@ -76,9 +80,13 @@ import { FormsModule } from '@angular/forms';
                   </tr>
                 </thead>
                 <tbody>
-                  <tr *ngFor="let t of data.transactions">
-                    <td><b>₹{{ t.amount | number:'1.2-2' }}</b></td>
-                    <td>{{ t.category }}</td>
+                  <tr *ngFor="let t of data.transactions; trackBy: trackById" class="table-row-animate">
+                    <td><b class="amount-text">₹{{ t.amount | number:'1.2-2' }}</b></td>
+                    <td>
+                      <span class="category-badge" [style.background]="getCategoryColor(t.category).bg" [style.color]="getCategoryColor(t.category).color">
+                        {{ t.category }}
+                      </span>
+                    </td>
                     <td>{{ t.subCategory }}</td>
                     <td>{{ t.date }}</td>
                     <td>
@@ -95,8 +103,11 @@ import { FormsModule } from '@angular/forms';
                     </td>
                   </tr>
                   <tr *ngIf="data.transactions?.length === 0">
-                    <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
-                      No transactions found matching your criteria.
+                    <td colspan="6">
+                      <div class="empty-state" style="padding: 40px;">
+                        <i class="ph ph-receipt"></i>
+                        <p>No transactions found matching your criteria.</p>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
@@ -108,38 +119,10 @@ import { FormsModule } from '@angular/forms';
     </main>
   `,
   styles: [`
-    .dashboard-layout { display: flex; min-height: 100vh; }
-    .main-content { flex: 1; margin-left: var(--sidebar-width); }
-    .top-header { height: 100px; display: flex; align-items: center; justify-content: space-between; padding: 0 40px; background: var(--bg-main); position: sticky; top: 0; z-index: 10; }
-    .header-left h1 { font-size: 24px; margin-bottom: 4px; }
-    .header-right { display: flex; align-items: center; gap: 24px; }
-    .search-box { position: relative; width: 300px; }
-    .search-box input { width: 100%; padding: 12px 20px 12px 48px; border-radius: 24px; border: 1px solid var(--border-light); outline: none; }
-    .search-box .search-btn { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); border: none; background: none; color: var(--text-muted); }
-    
-    .profile-img, .fallback-header-avatar { 
-      width: 44px; height: 44px; border-radius: 50%; object-fit: cover; 
-    }
-    .fallback-header-avatar {
-      background: #F1F5F9; color: #64748B; border: 1px solid var(--border-light);
-      display: flex; align-items: center; justify-content: center; font-size: 20px;
-    }
-
-    .dashboard-body { padding: 24px 40px; }
-    
-    .filter-tabs { display: flex; gap: 12px; }
-    .filter-tab { padding: 8px 20px; border-radius: 20px; border: 1px solid var(--border-light); background: white; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-    .filter-tab.active { background: var(--text-dark); color: white; border-color: var(--text-dark); }
-    
-    table { width: 100%; border-collapse: collapse; }
-    th { text-align: left; padding: 16px; color: var(--text-muted); border-bottom: 1px solid var(--border-light); font-weight: 500; }
-    td { padding: 16px; border-bottom: 1px solid var(--border-light); font-size: 14px; }
-    .mode-chip { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-    .bank-mode { background: #EFF6FF; color: #3B82F6; }
-    .upi-mode { background: #FFF7ED; color: #F59E0B; }
-    .card-mode { background: #F3E8FF; color: #8B5CF6; }
-    .delete-btn { border: none; background: none; color: var(--text-muted); cursor: pointer; font-size: 18px; transition: color 0.2s; }
-    .delete-btn:hover { color: var(--danger-red); }
+    .amount-text { color: var(--text-dark); }
+    .category-badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .table-row-animate { animation: fadeIn 0.3s ease; }
+    .export-btn { font-size: 13px; padding: 8px 16px; }
   `]
 })
 export class AllExpensesComponent implements OnInit {
@@ -147,6 +130,14 @@ export class AllExpensesComponent implements OnInit {
   searchQuery$ = new BehaviorSubject<string>('');
   categoryFilter$ = new BehaviorSubject<string>('All');
   filteredTransactions$!: Observable<Transaction[]>;
+
+  private categoryColors: Record<string, { bg: string; color: string }> = {
+    'Food & Grocery': { bg: 'rgba(16, 185, 129, 0.1)', color: '#10B981' },
+    'Shopping': { bg: 'rgba(139, 92, 246, 0.1)', color: '#8B5CF6' },
+    'Entertainment': { bg: 'rgba(245, 158, 11, 0.1)', color: '#F59E0B' },
+    'Transport': { bg: 'rgba(59, 130, 246, 0.1)', color: '#3B82F6' },
+    'Bills': { bg: 'rgba(239, 68, 68, 0.1)', color: '#EF4444' },
+  };
 
   constructor(private expenseService: ExpenseService) { }
 
@@ -161,14 +152,20 @@ export class AllExpensesComponent implements OnInit {
       map(([transactions, query, category]) => {
         return transactions.filter(t => {
           const matchesQuery = !query ||
-            t.subCategory.toLowerCase().includes(query.toLowerCase()) ||
-            t.category.toLowerCase().includes(query.toLowerCase());
+            (t.subCategory && t.subCategory.toLowerCase().includes(query.toLowerCase())) ||
+            (t.category && t.category.toLowerCase().includes(query.toLowerCase()));
           const matchesCategory = category === 'All' || t.category === category;
           return matchesQuery && matchesCategory;
         });
       })
     );
   }
+
+  getCategoryColor(category: string) {
+    return this.categoryColors[category] || { bg: 'rgba(100, 116, 139, 0.1)', color: '#64748B' };
+  }
+
+  trackById(index: number, item: Transaction) { return item.id; }
 
   updateSearch(query: string) {
     this.searchQuery$.next(query);
@@ -182,5 +179,17 @@ export class AllExpensesComponent implements OnInit {
     if (confirm('Are you sure you want to delete this transaction?')) {
       this.expenseService.deleteTransaction(id);
     }
+  }
+
+  exportCSV(transactions: Transaction[]) {
+    if (!transactions.length) return;
+    const headers = ['Amount', 'Category', 'Merchant', 'Date', 'Mode'];
+    const rows = transactions.map(t => [t.amount, t.category, t.subCategory, t.date, t.mode].join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'expenses.csv'; a.click();
+    URL.revokeObjectURL(url);
   }
 }

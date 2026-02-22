@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ExpenseService } from '../../services/expense.service';
 import { AuthService } from '../../services/auth.service';
+import { ThemeService } from '../../services/theme.service';
 import { User, DashboardStats } from '../../services/models';
 import { Observable } from 'rxjs';
 import { SidebarComponent } from '../../shared/sidebar/sidebar.component';
@@ -39,7 +40,7 @@ import { FormsModule } from '@angular/forms';
                 <p>{{ user.email }}</p>
               </div>
 
-              <div class="profile-actions" style="margin-top: 24px;">
+              <div class="profile-actions">
                 <label>Profile Picture URL</label>
                 <div class="input-group">
                   <input type="text" [(ngModel)]="avatarUrl" placeholder="https://image.url">
@@ -51,17 +52,17 @@ import { FormsModule } from '@angular/forms';
             <div class="card settings-list">
               <div class="bank-management">
                 <h3>Bank Accounts</h3>
-                <p class="sub-text">Add your bank accounts to track local balances</p>
+                <p class="sub-text">Add your bank accounts to track balances</p>
                 
-                <div class="bank-list" style="margin: 24px 0;">
+                <div class="bank-list">
                   <div class="bank-item" *ngFor="let bank of user.bankAccounts">
                     <div class="bank-info">
                        <i class="ph ph-bank"></i>
                        <span>{{ bank }}</span>
                     </div>
-                    <span>₹{{ (stats$ | async)?.bankBalances?.[bank] || 0 | number }}</span>
+                    <span class="bank-balance-text">₹{{ (stats$ | async)?.bankBalances?.[bank] || 0 | number }}</span>
                   </div>
-                  <p *ngIf="user.bankAccounts.length === 0" style="color: var(--text-muted);">No bank accounts added.</p>
+                  <p *ngIf="user.bankAccounts.length === 0" class="no-banks">No bank accounts added.</p>
                 </div>
 
                 <div class="input-group">
@@ -70,17 +71,46 @@ import { FormsModule } from '@angular/forms';
                 </div>
               </div>
 
-              <hr style="margin: 40px 0; border: none; border-top: 1px solid var(--border-light);">
+              <hr class="divider">
+
+              <h3>Preferences</h3>
 
               <div class="setting-item">
                 <div class="setting-info">
-                  <h4>Push Notifications</h4>
-                  <p>Receive alerts for new transactions</p>
+                  <i class="ph ph-moon"></i>
+                  <div>
+                    <h4>Dark Mode</h4>
+                    <p>Switch between light and dark themes</p>
+                  </div>
+                </div>
+                <div class="toggle" [class.active]="themeService.isDarkMode$ | async" (click)="themeService.toggle()"></div>
+              </div>
+
+              <div class="setting-item">
+                <div class="setting-info">
+                  <i class="ph ph-bell"></i>
+                  <div>
+                    <h4>Push Notifications</h4>
+                    <p>Receive alerts for new transactions</p>
+                  </div>
                 </div>
                 <div class="toggle active"></div>
               </div>
+
+              <div class="setting-item">
+                <div class="setting-info">
+                  <i class="ph ph-currency-circle-dollar"></i>
+                  <div>
+                    <h4>Currency</h4>
+                    <p>Display currency preference</p>
+                  </div>
+                </div>
+                <span class="currency-display">₹ INR</span>
+              </div>
               
-              <button class="danger-btn" (click)="logout()">Sign Out</button>
+              <button class="danger-btn" style="width: 100%; margin-top: 32px;" (click)="logout()">
+                <i class="ph ph-sign-out"></i> Sign Out
+              </button>
             </div>
           </div>
         </div>
@@ -88,47 +118,46 @@ import { FormsModule } from '@angular/forms';
     </main>
   `,
   styles: [`
-    .dashboard-layout { display: flex; min-height: 100vh; }
-    .main-content { flex: 1; margin-left: var(--sidebar-width); }
-    .top-header { height: 100px; display: flex; align-items: center; justify-content: space-between; padding: 0 40px; background: var(--bg-main); position: sticky; top: 0; z-index: 10; }
-    .dashboard-body { padding: 40px; }
-
-    .settings-grid { display: grid; grid-template-columns: 350px 1fr; gap: 40px; }
-    .profile-card { padding: 40px; text-align: center; }
-    .avatar-container { margin-bottom: 24px; display: flex; justify-content: center; }
+    .settings-grid { display: grid; grid-template-columns: 340px 1fr; gap: 32px; }
+    .profile-card { padding: 36px; text-align: center; }
+    .avatar-container { margin-bottom: 20px; display: flex; justify-content: center; }
     .avatar-container img, .fallback-avatar { 
-      width: 120px; height: 120px; border-radius: 50%; 
+      width: 100px; height: 100px; border-radius: 50%; 
       border: 4px solid var(--primary-blue-light); object-fit: cover;
     }
     .fallback-avatar { 
-       background: #F1F5F9; color: #64748B;
-       display: flex; align-items: center; justify-content: center; font-size: 48px;
+       background: var(--bg-chip); color: var(--text-muted);
+       display: flex; align-items: center; justify-content: center; font-size: 40px;
     }
-    .profile-preview h3 { margin-bottom: 8px; }
-    .profile-preview p { color: var(--text-muted); }
+    .profile-preview h3 { margin-bottom: 4px; }
+    .profile-preview p { color: var(--text-muted); font-size: 13px; }
 
-    .profile-actions { text-align: left; }
+    .profile-actions { text-align: left; margin-top: 24px; }
     .profile-actions label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 8px; color: var(--text-muted); }
 
-    .settings-list { padding: 40px; }
-    .bank-item { display: flex; justify-content: space-between; padding: 12px; background: #F8FAFC; border-radius: 12px; margin-bottom: 8px; }
-    .bank-info { display: flex; align-items: center; gap: 12px; font-weight: 500; }
+    .settings-list { padding: 36px; }
+    .sub-text { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
+    .bank-list { margin: 20px 0; }
+    .bank-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: var(--bg-hover); border-radius: 12px; margin-bottom: 8px; }
+    .bank-info { display: flex; align-items: center; gap: 12px; font-weight: 500; color: var(--text-dark); }
     .bank-info i { font-size: 20px; color: var(--primary-blue); }
+    .bank-balance-text { font-weight: 600; color: var(--text-dark); }
+    .no-banks { color: var(--text-muted); font-size: 13px; }
 
-    .input-group { display: flex; gap: 12px; }
-    .input-group input { flex: 1; padding: 12px; border: 1px solid var(--border-light); border-radius: 12px; outline: none; }
+    .divider { margin: 32px 0; border: none; border-top: 1px solid var(--border-light); }
 
-    .setting-item { display: flex; justify-content: space-between; align-items: center; padding: 24px 0; border-bottom: 1px solid var(--border-light); }
-    .setting-info h4 { margin-bottom: 4px; }
-    .setting-info p { font-size: 14px; color: var(--text-muted); }
+    .setting-item { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--border-light); }
+    .setting-info { display: flex; align-items: center; gap: 16px; }
+    .setting-info > i { font-size: 22px; color: var(--text-muted); }
+    .setting-info h4 { margin-bottom: 2px; font-size: 14px; }
+    .setting-info p { font-size: 12px; color: var(--text-muted); }
+    .currency-display { font-weight: 700; color: var(--text-dark); font-size: 14px; }
 
-    .toggle { width: 44px; height: 24px; background: #e2e8f0; border-radius: 12px; position: relative; cursor: pointer; }
-    .toggle::after { content: ""; position: absolute; width: 18px; height: 18px; background: white; border-radius: 50%; top: 3px; left: 3px; transition: all 0.2s; }
-    .toggle.active { background: var(--primary-blue); }
-    .toggle.active::after { left: 23px; }
+    .danger-btn { display: flex; align-items: center; justify-content: center; gap: 8px; }
 
-    .danger-btn { margin-top: 40px; padding: 12px 24px; border: 1px solid var(--danger-red); color: var(--danger-red); border-radius: 12px; background: none; cursor: pointer; font-weight: 600; width: 100%; }
-    .danger-btn:hover { background: #FEF2F2; }
+    @media (max-width: 900px) {
+      .settings-grid { grid-template-columns: 1fr; }
+    }
   `]
 })
 export class SettingsComponent implements OnInit {
@@ -139,7 +168,8 @@ export class SettingsComponent implements OnInit {
 
   constructor(
     private expenseService: ExpenseService,
-    private authService: AuthService
+    private authService: AuthService,
+    public themeService: ThemeService
   ) { }
 
   ngOnInit() {

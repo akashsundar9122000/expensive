@@ -12,7 +12,8 @@
     justify-content: center;
     padding: 0 10%;
     max-width: 600px;
-    background: white;
+    background: var(--bg-card);
+    transition: background var(--transition-normal);
 }
 
 .auth-header {
@@ -22,7 +23,7 @@
 .auth-header .logo-icon {
     width: 48px;
     height: 48px;
-    background-color: var(--primary-blue);
+    background: linear-gradient(135deg, var(--primary-blue), var(--investment-purple));
     color: white;
     border-radius: 14px;
     display: flex;
@@ -82,6 +83,8 @@
     font-size: 15px;
     outline: none;
     transition: all 0.2s;
+    background: var(--bg-input);
+    color: var(--text-dark);
 }
 
 .input-wrapper input:focus {
@@ -130,7 +133,7 @@
 }
 
 .auth-btn {
-    background-color: var(--text-dark);
+    background: linear-gradient(135deg, var(--primary-blue), var(--investment-purple));
     color: white;
     padding: 14px;
     border-radius: 12px;
@@ -138,12 +141,12 @@
     font-weight: 600;
     margin-top: 8px;
     transition: all 0.2s;
+    border: none;
 }
 
 .auth-btn:hover {
-    background-color: #000;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
 }
 
 .google-btn {
@@ -151,7 +154,7 @@
     align-items: center;
     justify-content: center;
     gap: 12px;
-    background-color: white;
+    background-color: var(--bg-input);
     border: 1px solid var(--border-light);
     color: var(--text-dark);
     padding: 14px;
@@ -162,7 +165,7 @@
 }
 
 .google-btn:hover {
-    background-color: var(--bg-main);
+    background-color: var(--bg-hover);
 }
 
 .google-btn img {
@@ -184,7 +187,7 @@
 /* --- Visual Side --- */
 .auth-visual {
     flex: 1.2;
-    background-color: #0f172a;
+    background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
     position: relative;
     display: flex;
     align-items: center;
@@ -201,7 +204,7 @@
 
 .quote-card {
     background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(16px);
     border: 1px solid rgba(255, 255, 255, 0.1);
     padding: 40px;
     border-radius: 32px;
@@ -227,13 +230,6 @@
     gap: 16px;
 }
 
-.quote-author img {
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    border: 2px solid var(--primary-blue);
-}
-
 .author-info {
     display: flex;
     flex-direction: column;
@@ -241,6 +237,7 @@
 
 .author-info strong {
     font-size: 16px;
+    color: white;
 }
 
 .author-info span {
@@ -254,6 +251,7 @@
     border-radius: 50%;
     filter: blur(80px);
     z-index: 1;
+    animation: blobFloat 8s ease-in-out infinite;
 }
 
 .blob-1 {
@@ -272,6 +270,23 @@
     bottom: -50px;
     left: -50px;
     opacity: 0.3;
+    animation-delay: 4s;
+}
+
+@keyframes blobFloat {
+
+    0%,
+    100% {
+        transform: translate(0, 0) scale(1);
+    }
+
+    33% {
+        transform: translate(20px, -15px) scale(1.05);
+    }
+
+    66% {
+        transform: translate(-10px, 10px) scale(0.95);
+    }
 }
 
 /* Responsive */
