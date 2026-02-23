@@ -27,13 +27,13 @@ module.exports = async (req, res) => {
         }
 
         if (req.method === 'PUT') {
-            const { goalName, goalRequired, goalCollected, totalInvestment, investAmount } = req.body;
+            const { goalName, goalRequired, goalCollected, goalCollectedIncrement, totalInvestment, investAmount } = req.body;
             const existing = await query('SELECT * FROM user_preferences WHERE user_id = $1', [userId]);
 
             if (existing.rows.length === 0) {
                 await query(
                     'INSERT INTO user_preferences (user_id, goal_name, goal_required, goal_collected, total_investment, invest_amount) VALUES ($1, $2, $3, $4, $5, $6)',
-                    [userId, goalName || 'Savings Goal', goalRequired || 100000, goalCollected || 0, totalInvestment || 0, investAmount || 0]
+                    [userId, goalName || 'Savings Goal', goalRequired || 100000, (goalCollected || 0) + (goalCollectedIncrement || 0), totalInvestment || 0, investAmount || 0]
                 );
             } else {
                 const updates = [];
@@ -41,7 +41,15 @@ module.exports = async (req, res) => {
                 let i = 1;
                 if (goalName !== undefined) { updates.push(`goal_name = $${i++}`); values.push(goalName); }
                 if (goalRequired !== undefined) { updates.push(`goal_required = $${i++}`); values.push(goalRequired); }
-                if (goalCollected !== undefined) { updates.push(`goal_collected = $${i++}`); values.push(goalCollected); }
+
+                if (goalCollectedIncrement !== undefined) {
+                    updates.push(`goal_collected = goal_collected + $${i++}`);
+                    values.push(goalCollectedIncrement);
+                } else if (goalCollected !== undefined) {
+                    updates.push(`goal_collected = $${i++}`);
+                    values.push(goalCollected);
+                }
+
                 if (totalInvestment !== undefined) { updates.push(`total_investment = $${i++}`); values.push(totalInvestment); }
                 if (investAmount !== undefined) { updates.push(`invest_amount = $${i++}`); values.push(investAmount); }
 
@@ -50,6 +58,7 @@ module.exports = async (req, res) => {
                     await query(`UPDATE user_preferences SET ${updates.join(', ')} WHERE user_id = $${i}`, values);
                 }
             }
+
 
             const result = await query('SELECT * FROM user_preferences WHERE user_id = $1', [userId]);
             const p = result.rows[0];

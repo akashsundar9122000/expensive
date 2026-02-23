@@ -3,15 +3,17 @@ import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ExpenseService } from '../services/expense.service';
 import { AuthService } from '../services/auth.service';
-import { Transaction, Subscription, DashboardStats, User } from '../services/models';
-import { Observable } from 'rxjs';
+import { Transaction, Subscription, DashboardStats, User, Budget } from '../services/models';
+import { Observable, combineLatest, map } from 'rxjs';
 import { SidebarComponent } from '../shared/sidebar/sidebar.component';
 import { RouterLink } from '@angular/router';
+import { CountUpDirective } from '../shared/directives/count-up.directive';
+
 
 @Component({
     selector: 'app-dashboard',
     standalone: true,
-    imports: [CommonModule, ReactiveFormsModule, SidebarComponent, RouterLink],
+    imports: [CommonModule, ReactiveFormsModule, SidebarComponent, RouterLink, CountUpDirective],
     templateUrl: './dashboard.component.html',
     styleUrl: './dashboard.component.css'
 })
@@ -21,16 +23,20 @@ export class DashboardComponent implements OnInit, OnDestroy {
     currentDate = '';
     greeting = '';
     private timerInterval: any;
+
     user$!: Observable<User | null>;
     stats$!: Observable<DashboardStats>;
     transactions$!: Observable<Transaction[]>;
     subscriptions$!: Observable<Subscription[]>;
+    budgets$!: Observable<Budget[]>;
 
-    showModal = false;
     showProfileMenu = false;
     showBankSelector = false;
+    isMobileMenuOpen = false;
+    showModal = false;
     showAssets = false;
-    selectedBank: string = 'SBI'; // Default fallback
+    selectedBank = 'SBI';
+
     expenseForm!: FormGroup;
 
     constructor(
@@ -46,6 +52,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.stats$ = this.expenseService.getStats();
         this.transactions$ = this.expenseService.getTransactions();
         this.subscriptions$ = this.expenseService.getSubscriptions();
+        this.budgets$ = this.expenseService.getBudgets();
+
 
         this.user$.subscribe(user => {
             if (user && user.bankAccounts && user.bankAccounts.length > 0 && !user.bankAccounts.includes(this.selectedBank)) {
@@ -89,6 +97,42 @@ export class DashboardComponent implements OnInit, OnDestroy {
         else this.greeting = 'Good Evening';
     }
 
+    getCategorySpending(transactions: Transaction[], category: string): number {
+        return transactions
+            .filter(t => t.category === category && (t.type === 'Expense' || !t.type))
+            .reduce((sum, t) => sum + t.amount, 0);
+    }
+
+
+    getBudgetProgress(transactions: Transaction[], budgets: Budget[]): any[] {
+        if (!budgets) return [];
+        return budgets.map(b => {
+            const spent = this.getCategorySpending(transactions || [], b.category);
+            const percent = Math.min((spent / b.limitAmount) * 100, 100);
+            return {
+                ...b,
+                spent,
+                percent,
+                status: percent > 90 ? 'danger' : percent > 75 ? 'warning' : 'success'
+            };
+        });
+    }
+
+    toggleMobileMenu() {
+        this.isMobileMenuOpen = !this.isMobileMenuOpen;
+    }
+
+    onSaveBudget(category: string, limit: number) {
+        if (!category || !limit) return;
+        this.expenseService.saveBudget(category, limit);
+        this.showModal = false;
+    }
+
+    logout() {
+        this.authService.logout();
+    }
+
+
     private initForm() {
         this.expenseForm = this.fb.group({
             amount: ['', [Validators.required, Validators.min(1)]],
@@ -128,11 +172,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.expenseForm.patchValue({ bank: bank });
     }
 
-    logout() {
-        this.authService.logout();
-    }
-
     onSubmit() {
+
         if (this.expenseForm.valid) {
             const formValue = this.expenseForm.value;
             const dateParts = formValue.date.split('-');

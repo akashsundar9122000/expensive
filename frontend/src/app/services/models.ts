@@ -13,6 +13,7 @@ export interface Transaction {
     subCategory: string;
     date: string;
     mode: 'Bank' | 'UPI' | 'Card';
+    type?: 'Income' | 'Expense';
 }
 
 export interface Subscription {
@@ -31,6 +32,12 @@ export interface Investment {
     amount: number;
     returnPct?: number;
 }
+
+export interface Budget {
+    category: string;
+    limitAmount: number;
+}
+
 
 export interface DashboardStats {
     balance: number;

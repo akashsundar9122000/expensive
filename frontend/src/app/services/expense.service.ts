@@ -1,17 +1,19 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable } from 'rxjs';
-import { Transaction, Subscription, DashboardStats, User, Investment } from './models';
-import { AuthService } from './auth.service';
 import { HttpClient } from '@angular/common/http';
+import { BehaviorSubject, Observable, forkJoin, tap } from 'rxjs';
+import { Transaction, Subscription, Investment, DashboardStats, User, Budget } from './models';
+import { AuthService } from './auth.service';
 
 @Injectable({
     providedIn: 'root'
 })
 export class ExpenseService {
-    private statsSubject = new BehaviorSubject<DashboardStats>(this.getDefaultStats());
-    private transactionsSubject = new BehaviorSubject<Transaction[]>([]);
-    private subscriptionsSubject = new BehaviorSubject<Subscription[]>([]);
-    private investmentsSubject = new BehaviorSubject<Investment[]>([]);
+    private stats = new BehaviorSubject<DashboardStats>(this.getDefaultStats());
+    private transactions = new BehaviorSubject<Transaction[]>([]);
+    private subscriptions = new BehaviorSubject<Subscription[]>([]);
+    private investments = new BehaviorSubject<Investment[]>([]);
+    private budgets = new BehaviorSubject<Budget[]>([]);
+    private user = new BehaviorSubject<User | null>(null);
     private apiUrl = '/api/expenses';
 
     constructor(private authService: AuthService, private http: HttpClient) {
@@ -38,60 +40,42 @@ export class ExpenseService {
     }
 
     private refreshAllData() {
-        this.fetchStats();
-        this.fetchTransactions();
-        this.fetchSubscriptions();
-        this.fetchInvestments();
-    }
+        forkJoin([
+            this.authService.getCurrentUser().pipe(tap(user => this.user.next(user))),
+            this.http.get<Transaction[]>(`${this.apiUrl}/transactions`),
+            this.http.get<Subscription[]>(`${this.apiUrl}/subscriptions`),
+            this.http.get<Investment[]>(`${this.apiUrl}/investments`),
+            this.http.get<Budget[]>(`${this.apiUrl}/budgets`),
+            this.http.get<DashboardStats>(`${this.apiUrl}/stats`)
+        ]).subscribe(([u, t, s, i, b, statsData]) => {
+            this.transactions.next(t);
+            this.subscriptions.next(s);
+            this.investments.next(i);
+            this.budgets.next(b);
+            this.stats.next(statsData);
 
-    private fetchStats() {
-        this.http.get<any>(`${this.apiUrl}/stats`).subscribe(data => {
-            const stats: DashboardStats = {
-                balance: data.balance,
-                monthlyExpenses: data.monthlyExpenses || 0,
-                totalInvestment: data.totalInvestment,
-                investAmount: data.investAmount,
-                goalName: data.goalName,
-                goalRequired: data.goalRequired,
-                goalCollected: data.goalCollected,
-                bankBalances: data.bankBalances || {}
-            };
-            this.statsSubject.next(stats);
-            const banks = Object.keys(data.bankBalances || {});
-            this.authService.updateUserInfo({ bankAccounts: banks });
-        });
-    }
-
-    private fetchTransactions() {
-        this.http.get<Transaction[]>(`${this.apiUrl}/transactions`).subscribe(transactions => {
-            this.transactionsSubject.next(transactions);
-        });
-    }
-
-    private fetchSubscriptions() {
-        this.http.get<Subscription[]>(`${this.apiUrl}/subscriptions`).subscribe(subs => {
-            this.subscriptionsSubject.next(subs);
-        });
-    }
-
-    private fetchInvestments() {
-        this.http.get<Investment[]>(`${this.apiUrl}/investments`).subscribe(investments => {
-            this.investmentsSubject.next(investments);
+            if (u && statsData.bankBalances) {
+                const banks = Object.keys(statsData.bankBalances);
+                this.authService.updateUserInfo({ bankAccounts: banks });
+            }
         });
     }
 
     private resetData() {
-        this.statsSubject.next(this.getDefaultStats());
-        this.transactionsSubject.next([]);
-        this.subscriptionsSubject.next([]);
-        this.investmentsSubject.next([]);
+        this.stats.next(this.getDefaultStats());
+        this.transactions.next([]);
+        this.subscriptions.next([]);
+        this.investments.next([]);
+        this.budgets.next([]);
+        this.user.next(null);
     }
 
-    getUser(): Observable<User | null> { return this.authService.getCurrentUser(); }
-    getStats(): Observable<DashboardStats> { return this.statsSubject.asObservable(); }
-    getTransactions(): Observable<Transaction[]> { return this.transactionsSubject.asObservable(); }
-    getSubscriptions(): Observable<Subscription[]> { return this.subscriptionsSubject.asObservable(); }
-    getInvestments(): Observable<Investment[]> { return this.investmentsSubject.asObservable(); }
+    getUser(): Observable<User | null> { return this.user.asObservable(); }
+    getStats(): Observable<DashboardStats> { return this.stats.asObservable(); }
+    getTransactions(): Observable<Transaction[]> { return this.transactions.asObservable(); }
+    getSubscriptions(): Observable<Subscription[]> { return this.subscriptions.asObservable(); }
+    getInvestments(): Observable<Investment[]> { return this.investments.asObservable(); }
+    getBudgets(): Observable<Budget[]> { return this.budgets.asObservable(); }
 
     addBank(bankName: string) {
         this.http.post<any>(`${this.apiUrl}/banks?name=${bankName}`, {}).subscribe(() => {
@@ -125,13 +109,18 @@ export class ExpenseService {
     }
 
     fundGoal(amount: number) {
-        this.http.get<any>(`${this.apiUrl}/stats`).subscribe(data => {
-            const currentCollected = data.goalCollected || 0;
-            this.http.put(`${this.apiUrl}/preferences`, {
-                goalCollected: currentCollected + amount
-            }).subscribe(() => this.refreshAllData());
-        });
+        this.http.put(`${this.apiUrl}/preferences`, {
+            goalCollectedIncrement: amount
+        }).subscribe(() => this.refreshAllData());
     }
 
     updateBalance(bankName: string, amount: number) { this.refreshAllData(); }
+
+    saveBudget(category: string, limitAmount: number) {
+        this.http.post(`${this.apiUrl}/budgets`, { category, limitAmount }).subscribe(() => this.refreshAllData());
+    }
+
+    deleteBudget(category: string) {
+        this.http.delete(`${this.apiUrl}/budgets?category=${category}`).subscribe(() => this.refreshAllData());
+    }
 }

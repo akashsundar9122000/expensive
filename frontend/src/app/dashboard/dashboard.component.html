@@ -1,19 +1,22 @@
-<main class="dashboard-layout" *ngIf="{
+<div *ngIf="{
   user: user$ | async,
   stats: stats$ | async,
   transactions: transactions$ | async,
-  subscriptions: subscriptions$ | async
-} as data">
+  subscriptions: subscriptions$ | async,
+  budgets: budgets$ | async
+} as data" class="dashboard-wrapper">
 
     <!-- Sidebar -->
-    <app-sidebar></app-sidebar>
+    <app-sidebar [isMobileOpen]="isMobileMenuOpen" (closeMobile)="isMobileMenuOpen = false"></app-sidebar>
 
     <!-- Main Content -->
-    <div class="main-content">
-
+    <main class="main-content">
         <!-- Header -->
         <header class="top-header">
             <div class="header-left">
+                <button class="menu-trigger" (click)="toggleMobileMenu()">
+                    <i class="ph ph-list"></i>
+                </button>
                 <h1>{{ greeting }}, {{ (data.user?.name || '').split(' ')[0] || 'User' }} 👋</h1>
                 <p>Track your all expense and transactions</p>
             </div>
@@ -23,267 +26,221 @@
             </div>
 
             <div class="header-right">
-
                 <div class="search-box">
-                    <input type="text" placeholder="Search anything here...">
-                    <button class="search-btn"><i class="ph ph-magnifying-glass"></i></button>
+                    <i class="ph ph-magnifying-glass"></i>
+                    <input type="text" placeholder="Search report, transactions...">
                 </div>
-
-                <button class="primary-btn add-btn" (click)="toggleModal()">
-                    <i class="ph-bold ph-plus"></i>
-                    Add Expense
-                </button>
-
                 <button class="icon-btn notification-btn">
                     <i class="ph ph-bell"></i>
-                    <span class="badge">2</span>
+                    <span class="badge">3</span>
                 </button>
-
                 <div class="profile-dropdown-wrapper">
-                    <div class="profile-dropdown" (click)="toggleProfileMenu()">
-                        <img *ngIf="data.user?.avatar; else fallbackHeaderAvatar" [src]="data.user?.avatar"
-                            alt="Profile" class="profile-img">
-                        <ng-template #fallbackHeaderAvatar>
-                            <div class="profile-img fallback-header-avatar">
-                                <i class="ph ph-user"></i>
-                            </div>
-                        </ng-template>
-                    </div>
+                    <img [src]="data.user?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Akash'"
+                        alt="Profile" class="profile-img" (click)="showProfileMenu = !showProfileMenu">
 
                     <div class="dropdown-menu profile-menu" *ngIf="showProfileMenu">
-                        <a routerLink="/settings"><i class="ph ph-gear"></i> Settings</a>
-                        <a href="javascript:void(0)" (click)="logout()"><i class="ph ph-sign-out"></i> Logout</a>
+                        <a routerLink="/settings"><i class="ph ph-user"></i> Profile Settings</a>
+                        <a routerLink="/all-expenses"><i class="ph ph-receipt"></i> All Expenses</a>
+                        <a href="javascript:void(0)" (click)="logout()" class="logout-link"><i
+                                class="ph ph-sign-out"></i> Logout</a>
                     </div>
                 </div>
-
             </div>
         </header>
 
-        <!-- Dashboard Content Area -->
-        <div class="dashboard-body" *ngIf="data.stats">
-
-            <!-- Overview Cards Grid -->
+        <div class="dashboard-body">
+            <!-- Overview Grid -->
             <div class="overview-grid">
-
-                <!-- Balance Card -->
-                <div class="card stat-card">
-                    <div class="flex-between stat-header">
-                        <div class="stat-icon blue-bg">
-                            <i class="ph-fill ph-wallet"></i>
+                <div class="stat-card blue-bg">
+                    <div class="stat-header">
+                        <div class="stat-icon">
+                            <i class="ph ph-wallet"></i>
                         </div>
                         <div class="stat-label-wrapper">
-                            <div class="stat-label flex-row badge outline" (click)="toggleBankSelector()">
-                                <i class="ph ph-bank bank-mini-icon"></i>
-                                {{ selectedBank }}
-                                <i class="ph ph-caret-down"></i>
-                            </div>
-
+                            <button class="badge outline stat-label" (click)="showBankSelector = !showBankSelector">
+                                {{ selectedBank }} <i class="ph ph-caret-down"></i>
+                            </button>
                             <div class="dropdown-menu bank-selector-menu" *ngIf="showBankSelector">
                                 <a href="javascript:void(0)" *ngFor="let bank of data.user?.bankAccounts"
-                                    (click)="selectBank(bank)">{{ bank }}</a>
-                                <a routerLink="/settings" class="add-bank-link">+ Add Bank</a>
+                                    (click)="selectedBank = bank; showBankSelector = false">
+                                    <i class="ph ph-bank bank-mini-icon"></i> {{ bank }}
+                                </a>
+                                <a href="javascript:void(0)" class="add-bank-link"><i class="ph ph-plus"></i> Add
+                                    Bank</a>
                             </div>
                         </div>
                     </div>
-                    <div class="stat-body" *ngIf="data.stats.bankBalances">
-                        <p>Balance ({{ selectedBank }})</p>
-                        <h3>₹{{ (data.stats.bankBalances[selectedBank] || 0) | number:'1.2-2' }}</h3>
-                        <div class="stat-trend success" style="font-size: 11px;">
-                            Total: ₹{{ data.stats.balance | number:'1.2-2' }}
+                    <div class="stat-body" *ngIf="data.stats">
+                        <p>Total Balance</p>
+                        <div class="amount-wrapper">
+                            <h3 [appCountUp]="data.stats.bankBalances[selectedBank] || 0">
+                                {{ (data.stats.bankBalances[selectedBank] || 0) | currency:'INR':'symbol':'1.0-0' }}
+                            </h3>
+                        </div>
+                        <div class="stat-trend success">
+                            <i class="ph ph-trend-up"></i>
+                            <span>+2.5%</span>
+                            <span class="sub-text">vs last month</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- Expenses Card -->
-                <div class="card stat-card">
-                    <div class="flex-between stat-header">
-                        <div class="stat-icon red-bg">
-                            <i class="ph-fill ph-receipt"></i>
+                <div class="stat-card red-bg">
+                    <div class="stat-header">
+                        <div class="stat-icon">
+                            <i class="ph ph-hand-coins"></i>
                         </div>
                     </div>
-                    <div class="stat-body">
-                        <p>Monthly Expenses</p>
-                        <h3>₹{{ data.stats.monthlyExpenses | number:'1.2-2' }}</h3>
-                        <div class="stat-trend danger"><i class="ph-bold ph-trend-down"></i> 2% less than last month
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Investment Card -->
-                <div class="card stat-card flex-between">
-                    <div class="stat-body">
-                        <p>Total Investment</p>
-                        <h3>₹{{ data.stats.totalInvestment | number:'1.2-2' }}</h3>
-                        <span class="sub-text">Invest Amount ₹{{ data.stats.investAmount | number:'1.2-2' }}</span>
-                    </div>
-                    <div class="mini-chart">
-                        <svg viewBox="0 0 100 40" class="sparkline purple-stroke">
-                            <path fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
-                                d="M0,35 L20,25 L40,30 L60,10 L80,15 L100,5" />
-                        </svg>
-                    </div>
-                </div>
-
-                <!-- Goal Card -->
-                <div class="card stat-card goal-card flex-between">
-                    <div class="stat-body">
-                        <p>Goals</p>
-                        <h4 class="goal-item">{{ data.stats.goalName }}</h4>
-                        <div class="goal-amount">
-                            <span>Required: <strong>₹{{ data.stats.goalRequired | number:'1.0-0' }}</strong></span>
-                            <span>Collect: <strong>₹{{ data.stats.goalCollected | number:'1.0-0' }}</strong></span>
-                        </div>
-                    </div>
-                    <div class="goal-progress">
-                        <div class="circular-progress orange-progress" [style.background]="getGoalGradient(data.stats)">
-                            <div class="progress-value">{{ getGoalProgress(data.stats) }}</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Total Assets Card with Eye Toggle -->
-                <div class="card stat-card assets-card">
-                    <div class="flex-between stat-header">
-                        <div class="stat-icon green-bg">
-                            <i class="ph-fill ph-chart-bar"></i>
-                        </div>
-                        <button class="eye-toggle" (click)="showAssets = !showAssets">
-                            <i class="ph" [ngClass]="showAssets ? 'ph-eye-slash' : 'ph-eye'"></i>
-                        </button>
-                    </div>
-                    <div class="stat-body">
-                        <p>Total Assets</p>
-                        <h3 *ngIf="showAssets">₹{{ (data.stats.balance + data.stats.totalInvestment) | number:'1.2-2' }}
+                    <div class="stat-body" *ngIf="data.stats">
+                        <p>Monthly Expense</p>
+                        <h3 [appCountUp]="data.stats.monthlyExpenses">
+                            {{ data.stats.monthlyExpenses | currency:'INR':'symbol':'1.0-0' }}
                         </h3>
-                        <h3 *ngIf="!showAssets" class="hidden-amount">₹ ••••••</h3>
-                        <div class="stat-trend success" style="font-size: 11px;">
-                            Balance + Investments
+                        <div class="stat-trend danger">
+                            <i class="ph ph-trend-down"></i>
+                            <span>-12.2%</span>
+                            <span class="sub-text">vs last month</span>
                         </div>
                     </div>
                 </div>
 
+                <!-- Budget Card -->
+                <div class="stat-card white-bg budget-card">
+                    <div class="stat-header">
+                        <div class="stat-icon green-bg">
+                            <i class="ph ph-chart-line-up"></i>
+                        </div>
+                        <span class="badge outline" (click)="showModal = true">Set Budget</span>
+                    </div>
+                    <div class="stat-body">
+                        <p>Active Budgets</p>
+                        <div class="budget-summary" *ngIf="data.budgets && data.budgets.length > 0; else noBudgets">
+                            <div class="budget-mini-item"
+                                *ngFor="let b of getBudgetProgress(data.transactions || [], data.budgets).slice(0, 2)">
+                                <div class="budget-info">
+                                    <span>{{ b.category }}</span>
+                                    <span>{{ b.percent | number:'1.0-0' }}%</span>
+                                </div>
+                                <div class="mini-progress-bar">
+                                    <div class="progress-fill" [style.width.%]="b.percent" [class]="b.status"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <ng-template #noBudgets>
+                            <h4 style="margin-top: 8px; color: var(--text-muted); font-size: 14px;">No budgets set yet
+                            </h4>
+                        </ng-template>
+                    </div>
+                </div>
             </div>
 
-            <!-- Charts Section -->
-            <div class="charts-grid">
-
-                <!-- Monthly Expenses Bar Chart -->
-                <div class="card chart-card flex-col">
+            <!-- Main Dashboard Content (Rest of Charts & Tables) -->
+            <div class="charts-grid" *ngIf="data.stats">
+                <!-- Bar Chart -->
+                <div class="card bar-chart-card">
                     <div class="flex-between chart-header">
-                        <div>
-                            <h3>Monthly Expenses</h3>
-                            <p class="stat-trend success" style="margin-top: 4px"><i class="ph-bold ph-trend-up"></i> 6%
-                                more than
-                                last month</p>
-                        </div>
-                        <button class="outline-btn flex-row">Recent <i class="ph ph-caret-down"></i></button>
+                        <h3>Expense Analysis</h3>
+                        <div class="badge outline">Monthly <i class="ph ph-caret-down"></i></div>
                     </div>
-
                     <div class="bar-chart-container">
                         <div class="chart-y-axis">
-                            <span>40k</span><span>30k</span><span>20k</span><span>10k</span><span>0</span>
+                            <span>20k</span>
+                            <span>15k</span>
+                            <span>10k</span>
+                            <span>5k</span>
+                            <span>0</span>
                         </div>
                         <div class="chart-bars">
                             <div class="bar-col">
-                                <div class="bar" style="height: 40%"></div><span>Jan</span>
+                                <div class="bar" style="height: 60%"></div>
+                                <span>Jan</span>
                             </div>
                             <div class="bar-col">
-                                <div class="bar" style="height: 60%"></div><span>Feb</span>
+                                <div class="bar" style="height: 45%"></div>
+                                <span>Feb</span>
                             </div>
                             <div class="bar-col">
-                                <div class="bar" style="height: 80%"></div><span>Mar</span>
+                                <div class="bar active" style="height: 85%"></div>
+                                <span>Mar</span>
                             </div>
                             <div class="bar-col">
-                                <div class="bar active" style="height: 100%"></div><span>Apr</span>
+                                <div class="bar" style="height: 30%"></div>
+                                <span>Apr</span>
                             </div>
                             <div class="bar-col">
-                                <div class="bar" style="height: 50%"></div><span>May</span>
+                                <div class="bar" style="height: 55%"></div>
+                                <span>May</span>
                             </div>
                             <div class="bar-col">
-                                <div class="bar" style="height: 70%"></div><span>Jun</span>
+                                <div class="bar" style="height: 70%"></div>
+                                <span>Jun</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Top Category Donut Chart -->
-                <div class="card donut-card flex-col">
-                    <h3>Top Category</h3>
-                    <p class="sub-text">Overall spending</p>
-
+                <!-- Donut Chart -->
+                <div class="card donut-card">
+                    <h3>Top Categories</h3>
                     <div class="donut-container">
                         <div class="donut-chart">
                             <div class="donut-hole">
-                                <span class="donut-total">₹{{ data.stats.monthlyExpenses | number }}</span>
-                                <span class="sub-text">Spent</span>
+                                <span class="donut-total">72%</span>
+                                <span class="sub-text">Used</span>
                             </div>
                         </div>
                     </div>
-
                     <div class="category-legend">
                         <div class="legend-item">
                             <span class="dot" style="background: var(--success-green)"></span>
-                            <span class="label">Food & Grocery</span>
+                            <span class="label">Education</span>
+                            <span class="value">33%</span>
                         </div>
                         <div class="legend-item">
                             <span class="dot" style="background: var(--warning-orange)"></span>
-                            <span class="label">Investment</span>
+                            <span class="label">Food</span>
+                            <span class="value">37%</span>
                         </div>
                         <div class="legend-item">
                             <span class="dot" style="background: var(--primary-blue)"></span>
-                            <span class="label">Shopping</span>
+                            <span class="label">Others</span>
+                            <span class="value">30%</span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Tables Section -->
             <div class="tables-grid">
-
-                <!-- Recent Expenses Table -->
+                <!-- Recent Transactions -->
                 <div class="card table-card">
-                    <div class="flex-between chart-header" style="margin-bottom: 16px;">
-                        <h3>Recent Expenses</h3>
-                        <button class="outline-btn" routerLink="/expenses">See All</button>
+                    <div class="flex-between chart-header">
+                        <h3>Recent Transactions</h3>
+                        <a routerLink="/all-expenses" class="view-all">View All</a>
                     </div>
-
                     <div class="table-container">
-                        <table>
+                        <table class="data-table">
                             <thead>
                                 <tr>
-                                    <th>S.N</th>
-                                    <th>Amount</th>
+                                    <th>Transaction</th>
                                     <th>Category</th>
-                                    <th>Sub Category</th>
                                     <th>Date</th>
-                                    <th>Mode</th>
-                                    <th>Action</th>
+                                    <th>Amount</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr *ngFor="let t of data.transactions; let i = index">
-                                    <td>{{ i + 1 }}</td>
-                                    <td><b>₹{{ t.amount | number:'1.2-2' }}</b></td>
-                                    <td>{{ t.category }}</td>
-                                    <td>{{ t.subCategory }}</td>
-                                    <td>{{ t.date }}</td>
+                                <tr *ngFor="let tx of (data.transactions || []).slice(0, 5)">
                                     <td>
-                                        <span class="mode-chip" [ngClass]="{
-                      'bank-mode': t.mode === 'Bank',
-                      'upi-mode': t.mode === 'UPI',
-                      'card-mode': t.mode === 'Card'
-                    }">{{ t.mode }}</span>
+                                        <div class="flex-row gap-12">
+                                            <div class="avatar-sm">
+                                                <i [class]="'ph ph-' + tx.category.toLowerCase()"></i>
+                                            </div>
+                                            <b>{{ tx.subCategory }}</b>
+                                        </div>
                                     </td>
-                                    <td>
-                                        <button class="delete-btn" (click)="deleteTransaction(t.id)">
-                                            <i class="ph ph-trash"></i>
-                                        </button>
-                                    </td>
-                                </tr>
-                                <tr *ngIf="data.transactions?.length === 0">
-                                    <td colspan="7"
-                                        style="text-align: center; padding: 40px; color: var(--text-muted);">
-                                        No transactions yet. Start by adding one!
+                                    <td>{{ tx.category }}</td>
+                                    <td>{{ tx.date | date:'dd MMM yyyy' }}</td>
+                                    <td [class]="tx.type === 'Income' ? 'success' : 'danger'">
+                                        {{ tx.type === 'Income' ? '+' : '-' }}₹{{ tx.amount | number:'1.0-0' }}
                                     </td>
                                 </tr>
                             </tbody>
@@ -291,119 +248,62 @@
                     </div>
                 </div>
 
-                <!-- Bill & Subscription List -->
-                <div class="card subscription-card">
-                    <div class="flex-between chart-header" style="margin-bottom: 16px;">
-                        <h3>Bill & Subscription</h3>
-                        <button class="outline-btn" routerLink="/subscriptions">See All</button>
+                <!-- Subscriptions -->
+                <div class="card subs-card">
+                    <div class="flex-between chart-header">
+                        <h3>Upcoming Bills</h3>
+                        <a routerLink="/subscriptions" class="view-all">Manage</a>
                     </div>
-
                     <div class="subs-list">
-                        <div class="sub-item" *ngFor="let s of data.subscriptions">
-                            <div class="sub-icon" [style.background-color]="s.color + '20'" [style.color]="s.color">
-                                <i class="ph-bold" [ngClass]="s.icon"></i>
+                        <div class="sub-item" *ngFor="let s of (data.subscriptions || []).slice(0, 4)">
+                            <div class="sub-icon" [style.backgroundColor]="s.color + '20'" [style.color]="s.color">
+                                <i [class]="'ph ' + s.icon"></i>
                             </div>
                             <div class="sub-details">
                                 <h4>{{ s.name }}</h4>
-                                <p>{{ s.date }}</p>
+                                <p>Monthly Subscription</p>
                             </div>
-                            <div class="sub-amount">₹{{ s.amount | number:'1.2-2' }}</div>
-                        </div>
-                        <div *ngIf="data.subscriptions?.length === 0"
-                            style="text-align: center; padding: 40px; color: var(--text-muted);">
-                            No active subscriptions.
+                            <div class="sub-amount">-₹{{ s.amount | number:'1.0-0' }}</div>
                         </div>
                     </div>
                 </div>
-
             </div>
-
         </div>
+    </main>
 
-    </div>
-</main>
+    <!-- Modal for Setting Budget -->
+    <div class="modal-overlay" *ngIf="showModal" (click)="showModal = false">
+        <div class="modal-card" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3>Set Monthly Budget</h3>
+                <button class="close-btn" (click)="showModal = false"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <form class="modal-form"
+                    (submit)="onSaveBudget(budgetCat.value, +budgetLimit.value); $event.preventDefault()">
+                    <div class="form-group">
+                        <label>Category</label>
 
-<!-- Add Expense Modal -->
-<div class="modal-overlay" *ngIf="showModal" (click)="toggleModal()">
-    <div class="modal-card" (click)="$event.stopPropagation()">
-        <div class="modal-header">
-            <h3>Add New Expense</h3>
-            <button class="close-btn" (click)="toggleModal()"><i class="ph ph-x"></i></button>
+                        <select #budgetCat>
+                            <option value="Food">Food</option>
+                            <option value="Education">Education</option>
+                            <option value="Transport">Transport</option>
+                            <option value="Shopping">Shopping</option>
+                            <option value="Bills">Bills</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Monthly Limit (₹)</label>
+                        <input type="number" #budgetLimit placeholder="e.g. 5000">
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn outline" (click)="showModal = false">Cancel</button>
+                        <button type="button" class="btn primary"
+                            (click)="onSaveBudget(budgetCat.value, +budgetLimit.value)"> Save Budget </button>
+                    </div>
+                </form>
+            </div>
         </div>
-
-        <form [formGroup]="expenseForm" (ngSubmit)="onSubmit()" class="modal-form">
-            <div class="form-row">
-                <div class="form-group flex-1">
-                    <label>Amount (₹)</label>
-                    <div class="input-wrapper">
-                        <i class="ph ph-currency-inr"></i>
-                        <input type="number" formControlName="amount" placeholder="0.00">
-                    </div>
-                </div>
-                <div class="form-group flex-1">
-                    <label>Date</label>
-                    <div class="input-wrapper">
-                        <i class="ph ph-calendar"></i>
-                        <input type="date" formControlName="date">
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label>Category</label>
-                <div class="input-wrapper">
-                    <i class="ph ph-tag"></i>
-                    <select formControlName="category">
-                        <option value="Food & Grocery">Food & Grocery</option>
-                        <option value="Shopping">Shopping</option>
-                        <option value="Entertainment">Entertainment</option>
-                        <option value="Investment">Investment</option>
-                        <option value="Bills">Bills</option>
-                        <option value="Transport">Transport</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label>Merchant / Sub-category</label>
-                <div class="input-wrapper">
-                    <i class="ph ph-storefront"></i>
-                    <input type="text" formControlName="subCategory" placeholder="e.g. Amazon, Starbucks">
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label>Select Account</label>
-                <div class="input-wrapper">
-                    <i class="ph ph-bank"></i>
-                    <select formControlName="bank">
-                        <option *ngFor="let bank of (user$ | async)?.bankAccounts" [value]="bank">{{ bank }}</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label>Payment Mode</label>
-                <div class="mode-selector">
-                    <label class="mode-option">
-                        <input type="radio" formControlName="mode" value="UPI">
-                        <div class="mode-card">UPI</div>
-                    </label>
-                    <label class="mode-option">
-                        <input type="radio" formControlName="mode" value="Bank">
-                        <div class="mode-card">Bank</div>
-                    </label>
-                    <label class="mode-option">
-                        <input type="radio" formControlName="mode" value="Card">
-                        <div class="mode-card">Card</div>
-                    </label>
-                </div>
-            </div>
-
-            <div class="modal-actions">
-                <button type="button" class="outline-btn" (click)="toggleModal()">Cancel</button>
-                <button type="submit" class="primary-btn" [disabled]="expenseForm.invalid">Save Expense</button>
-            </div>
-        </form>
     </div>
 </div>

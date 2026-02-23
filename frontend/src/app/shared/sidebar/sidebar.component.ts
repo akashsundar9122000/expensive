@@ -1,38 +1,42 @@
-import { Component } from '@angular/core';
+import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { ThemeService } from '../../services/theme.service';
+
 
 @Component({
     selector: 'app-sidebar',
     standalone: true,
     imports: [CommonModule, RouterLink, RouterLinkActive],
     template: `
-    <aside class="sidebar">
+    <aside class="sidebar" [class.open]="isMobileOpen">
         <div class="sidebar-logo">
             <div class="logo-icon">
                 <i class="ph-bold ph-wallet"></i>
             </div>
             <h2>EXPENSIFY</h2>
+            <button class="close-sidebar" (click)="closeMobile.emit()">
+                <i class="ph ph-x"></i>
+            </button>
         </div>
 
         <div class="nav-groups">
             <div class="nav-group">
                 <ul>
-                    <li><a routerLink="/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}"><i class="ph ph-squares-four"></i> Dashboard</a></li>
-                    <li><a routerLink="/expenses" routerLinkActive="active"><i class="ph ph-receipt"></i> All Expenses</a></li>
-                    <li><a routerLink="/subscriptions" routerLinkActive="active"><i class="ph ph-ticket"></i> Subscriptions</a></li>
-                    <li><a routerLink="/investments" routerLinkActive="active"><i class="ph ph-trend-up"></i> Investment</a></li>
-                    <li><a routerLink="/cards" routerLinkActive="active"><i class="ph ph-credit-card"></i> Cards & Banks</a></li>
-                    <li><a routerLink="/goals" routerLinkActive="active"><i class="ph ph-target"></i> Goals</a></li>
+                    <li><a routerLink="/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{exact: true}" (click)="closeMobile.emit()"><i class="ph ph-squares-four"></i> Dashboard</a></li>
+                    <li><a routerLink="/expenses" routerLinkActive="active" (click)="closeMobile.emit()"><i class="ph ph-receipt"></i> All Expenses</a></li>
+                    <li><a routerLink="/subscriptions" routerLinkActive="active" (click)="closeMobile.emit()"><i class="ph ph-ticket"></i> Subscriptions</a></li>
+                    <li><a routerLink="/investments" routerLinkActive="active" (click)="closeMobile.emit()"><i class="ph ph-trend-up"></i> Investment</a></li>
+                    <li><a routerLink="/cards" routerLinkActive="active" (click)="closeMobile.emit()"><i class="ph ph-credit-card"></i> Cards & Banks</a></li>
+                    <li><a routerLink="/goals" routerLinkActive="active" (click)="closeMobile.emit()"><i class="ph ph-target"></i> Goals</a></li>
                 </ul>
             </div>
 
             <div class="nav-group tools-group">
                 <h4 class="nav-title">Tools</h4>
                 <ul>
-                    <li><a routerLink="/settings" routerLinkActive="active"><i class="ph ph-gear"></i> Settings</a></li>
+                    <li><a routerLink="/settings" routerLinkActive="active" (click)="closeMobile.emit()"><i class="ph ph-gear"></i> Settings</a></li>
                     <li>
                         <a href="javascript:void(0)" (click)="toggleTheme()" class="theme-toggle-link">
                             <i class="ph" [ngClass]="(themeService.isDarkMode$ | async) ? 'ph-sun' : 'ph-moon'"></i>
@@ -50,6 +54,8 @@ import { ThemeService } from '../../services/theme.service';
             </ul>
         </div>
     </aside>
+    <div class="sidebar-overlay" *ngIf="isMobileOpen" (click)="closeMobile.emit()"></div>
+
   `,
     styles: [`
     .sidebar {
@@ -193,13 +199,47 @@ import { ThemeService } from '../../services/theme.service';
         left: 16px;
         background: white;
     }
+    .close-sidebar {
+        display: none;
+        background: none;
+        border: none;
+        color: var(--text-main);
+        font-size: 24px;
+        cursor: pointer;
+        padding: 4px;
+        margin-left: auto;
+    }
+
+    .sidebar-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0,0,0,0.5);
+        backdrop-filter: blur(4px);
+        z-index: 15;
+    }
+
+    @media (max-width: 768px) {
+        .close-sidebar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    }
   `]
+
 })
 export class SidebarComponent {
+    @Input() isMobileOpen = false;
+    @Output() closeMobile = new EventEmitter<void>();
+
     constructor(
         private authService: AuthService,
         public themeService: ThemeService
     ) { }
+
 
     toggleTheme() {
         this.themeService.toggle();
