@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, Observable, forkJoin, tap } from 'rxjs';
+import { BehaviorSubject, Observable, forkJoin, tap, take, catchError, of } from 'rxjs';
 import { Transaction, Subscription, Investment, DashboardStats, User, Budget } from './models';
 import { AuthService } from './auth.service';
 
@@ -39,24 +39,27 @@ export class ExpenseService {
         };
     }
 
-    private refreshAllData() {
+    refreshAllData() {
         forkJoin([
-            this.authService.getCurrentUser().pipe(tap(user => this.user.next(user))),
-            this.http.get<Transaction[]>(`${this.apiUrl}/transactions`),
-            this.http.get<Subscription[]>(`${this.apiUrl}/subscriptions`),
-            this.http.get<Investment[]>(`${this.apiUrl}/investments`),
-            this.http.get<Budget[]>(`${this.apiUrl}/budgets`),
-            this.http.get<DashboardStats>(`${this.apiUrl}/stats`)
+            this.authService.getCurrentUser().pipe(take(1)),
+            this.http.get<Transaction[]>(`${this.apiUrl}/transactions`).pipe(catchError(() => of([]))),
+            this.http.get<Subscription[]>(`${this.apiUrl}/subscriptions`).pipe(catchError(() => of([]))),
+            this.http.get<Investment[]>(`${this.apiUrl}/investments`).pipe(catchError(() => of([]))),
+            this.http.get<Budget[]>(`${this.apiUrl}/budgets`).pipe(catchError(() => of([]))),
+            this.http.get<DashboardStats>(`${this.apiUrl}/stats`).pipe(catchError(() => of(this.getDefaultStats())))
         ]).subscribe(([u, t, s, i, b, statsData]) => {
-            this.transactions.next(t);
-            this.subscriptions.next(s);
-            this.investments.next(i);
-            this.budgets.next(b);
-            this.stats.next(statsData);
+            const user = u as User | null;
+            this.user.next(user);
+            this.transactions.next(t as Transaction[]);
+            this.subscriptions.next(s as Subscription[]);
+            this.investments.next(i as Investment[]);
+            this.budgets.next(b as Budget[]);
+            this.stats.next(statsData as DashboardStats);
 
-            if (u && statsData.bankBalances) {
-                const banks = Object.keys(statsData.bankBalances);
+            if (user && (statsData as DashboardStats).bankBalances) {
+                const banks = Object.keys((statsData as DashboardStats).bankBalances);
                 this.authService.updateUserInfo({ bankAccounts: banks });
+                this.user.next({ ...user, bankAccounts: banks });
             }
         });
     }
@@ -92,8 +95,10 @@ export class ExpenseService {
         this.http.delete(`${this.apiUrl}/transactions/${id}`).subscribe(() => { this.refreshAllData(); });
     }
 
-    addSubscription(sub: Omit<Subscription, 'id'>) {
-        this.http.post<Subscription>(`${this.apiUrl}/subscriptions`, sub).subscribe(() => { this.refreshAllData(); });
+    addSubscription(sub: Omit<Subscription, 'id'>): Observable<Subscription> {
+        return this.http.post<Subscription>(`${this.apiUrl}/subscriptions`, sub).pipe(
+            tap(() => this.refreshAllData())
+        );
     }
 
     deleteSubscription(id: number) {

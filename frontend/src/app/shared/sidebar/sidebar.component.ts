@@ -54,7 +54,7 @@ import { ThemeService } from '../../services/theme.service';
             </ul>
         </div>
     </aside>
-    <div class="sidebar-overlay" *ngIf="isMobileOpen" (click)="closeMobile.emit()"></div>
+    <div class="sidebar-overlay" [class.active]="isMobileOpen" (click)="closeMobile.emit()"></div>
 
   `,
     styles: [`
@@ -69,8 +69,8 @@ import { ThemeService } from '../../services/theme.service';
         height: 100vh;
         left: 0;
         top: 0;
-        transition: background-color var(--transition-normal), border-color var(--transition-normal);
-        z-index: 20;
+        transition: transform var(--transition-normal), background-color var(--transition-normal), border-color var(--transition-normal);
+        z-index: 100;
     }
 
     .sidebar-logo {
@@ -212,20 +212,34 @@ import { ThemeService } from '../../services/theme.service';
 
     .sidebar-overlay {
         position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
+        inset: 0;
         background: rgba(0,0,0,0.5);
         backdrop-filter: blur(4px);
-        z-index: 15;
+        z-index: 90;
+        opacity: 0;
+        visibility: hidden;
+        transition: all var(--transition-normal);
     }
 
     @media (max-width: 768px) {
+        .sidebar {
+            transform: translateX(-100%);
+            width: 280px;
+        }
+
+        .sidebar.open {
+            transform: translateX(0);
+        }
+
         .close-sidebar {
             display: flex;
             align-items: center;
             justify-content: center;
+        }
+
+        .sidebar-overlay.active {
+            opacity: 1;
+            visibility: visible;
         }
     }
   `]

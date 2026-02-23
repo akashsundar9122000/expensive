@@ -3,20 +3,17 @@ package com.expensify.backend.model;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import java.math.BigDecimal;
 
 @Entity
-@Table(name = "subscriptions")
+@Table(name = "budgets")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
-public class Subscription {
+public class Budget {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -27,14 +24,8 @@ public class Subscription {
     private User user;
 
     @Column(nullable = false)
-    private String name;
+    private String category;
 
     @Column(nullable = false)
-    private BigDecimal amount;
-
-    @Column(nullable = true)
-    private String date;
-
-    private String icon;
-    private String color;
+    private BigDecimal limitAmount;
 }

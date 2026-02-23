@@ -1,6 +1,7 @@
 package com.expensify.backend.controller;
 
 import com.expensify.backend.model.BankAccount;
+import com.expensify.backend.model.Budget;
 import com.expensify.backend.model.Investment;
 import com.expensify.backend.model.Transaction;
 import com.expensify.backend.model.User;
@@ -9,6 +10,7 @@ import com.expensify.backend.service.ExpenseService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import java.math.BigDecimal;
 import java.security.Principal;
 import java.util.List;
 import java.util.Map;
@@ -110,5 +112,26 @@ public class ExpenseController {
             @RequestBody com.expensify.backend.model.UserPreference prefs, Principal principal) {
         User user = userRepository.findByEmail(principal.getName()).orElseThrow();
         return ResponseEntity.ok(expenseService.updatePreferences(user, prefs));
+    }
+
+    @GetMapping("/budgets")
+    public ResponseEntity<List<Budget>> getBudgets(Principal principal) {
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+        return ResponseEntity.ok(expenseService.getBudgets(user));
+    }
+
+    @PostMapping("/budgets")
+    public ResponseEntity<Budget> saveBudget(@RequestBody Map<String, Object> body, Principal principal) {
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+        String category = (String) body.get("category");
+        BigDecimal limitAmount = new BigDecimal(body.get("limitAmount").toString());
+        return ResponseEntity.ok(expenseService.saveBudget(user, category, limitAmount));
+    }
+
+    @DeleteMapping("/budgets")
+    public ResponseEntity<Void> deleteBudget(@RequestParam String category, Principal principal) {
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+        expenseService.deleteBudget(user, category);
+        return ResponseEntity.ok().build();
     }
 }

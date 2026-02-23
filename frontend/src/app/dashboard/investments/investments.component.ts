@@ -27,17 +27,20 @@ const INVESTMENT_TYPES = [
       stats: stats$ | async,
       investments: investments$ | async
     } as data">
-      <app-sidebar></app-sidebar>
+      <app-sidebar [isMobileOpen]="isMobileMenuOpen" (closeMobile)="isMobileMenuOpen = false"></app-sidebar>
 
       <div class="main-content">
         <header class="top-header">
           <div class="header-left">
+            <button class="menu-trigger" (click)="isMobileMenuOpen = !isMobileMenuOpen">
+                  <i class="ph ph-list"></i>
+            </button>
             <h1>Investments</h1>
             <p>Grow your wealth with smart tracking</p>
           </div>
           <div class="header-right">
-            <button class="primary-btn" (click)="showModal = true">
-              <i class="ph ph-plus"></i> Add Investment
+            <button class="primary-btn add-btn" (click)="showModal = true">
+              <i class="ph ph-plus"></i> <span class="btn-label">Add Investment</span>
             </button>
             <div class="fallback-header-avatar">
               <i class="ph ph-user"></i>
@@ -78,9 +81,6 @@ const INVESTMENT_TYPES = [
                 <div class="inv-details">
                   <h4>{{ inv.name }}</h4>
                   <span class="type-badge" [style.background]="getColor(inv.type).bg" [style.color]="getColor(inv.type).color">{{ inv.type }}</span>
-                </div>
-                <div class="inv-return" *ngIf="inv.returnPct">
-                  <span class="return-badge">{{ inv.returnPct }}% p.a.</span>
                 </div>
                 <div class="inv-amount">₹{{ inv.amount | number:'1.2-2' }}</div>
                 <button class="delete-btn" (click)="deleteInvestment(inv.id)">
@@ -159,8 +159,8 @@ const INVESTMENT_TYPES = [
     .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 28px; }
     .stat-card { padding: 28px; border-radius: 20px; color: white; }
     .card-label { font-size: 12px; opacity: 0.85; font-weight: 500; }
-    .stat-card h3 { font-size: 26px; font-weight: 800; margin: 8px 0 4px; color: white; }
-    .card-sub { font-size: 12px; opacity: 0.7; }
+    .stat-card h3 { font-size: 24px; font-weight: 800; margin: 8px 0 4px; color: white; }
+    .card-sub { font-size: 11px; opacity: 0.7; }
     .purple-card { background: linear-gradient(135deg, #9333ea, #7e22ce); }
     .green-card { background: linear-gradient(135deg, #10b981, #059669); }
     .blue-card { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
@@ -176,23 +176,74 @@ const INVESTMENT_TYPES = [
 
     .category-breakdown { display: flex; flex-direction: column; gap: 16px; }
     .category-row { display: flex; align-items: center; gap: 16px; }
-    .cat-info { display: flex; align-items: center; gap: 10px; width: 140px; font-weight: 500; font-size: 14px; color: var(--text-dark); }
+    .cat-info { display: flex; align-items: center; gap: 10px; width: 120px; font-weight: 500; font-size: 13px; color: var(--text-dark); }
     .cat-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
     .cat-bar-wrapper { flex: 1; height: 8px; background: var(--bg-chip); border-radius: 4px; overflow: hidden; }
     .cat-bar { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
     .cat-pct { font-size: 13px; font-weight: 600; width: 50px; text-align: right; color: var(--text-muted); }
 
-    .investment-types-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
-    .type-option { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 6px; border-radius: 14px; border: 2px solid var(--border-light); cursor: pointer; transition: all 0.2s; font-size: 11px; font-weight: 600; text-align: center; color: var(--text-main); }
-    .type-option:hover { border-color: var(--primary-blue); }
-    .type-option.selected { border-color: var(--primary-blue); background: var(--primary-blue-light); }
-    .type-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+    .menu-trigger {
+        background: none;
+        border: none;
+        color: var(--text-main);
+        font-size: 24px;
+        cursor: pointer;
+        padding: 4px;
+        display: none;
+        align-items: center;
+        justify-content: center;
+    }
+
+    @media (max-width: 900px) {
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .menu-trigger {
+            display: flex;
+        }
+        
+        .investment-types-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .btn-text {
+            display: none;
+        }
+        
+        .add-btn {
+            width: 44px;
+            height: 44px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+
+        .cat-info {
+            width: 80px;
+        }
+        
+        .cat-pct {
+            width: 40px;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .investment-types-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
   `]
 })
 export class InvestmentsComponent implements OnInit {
   user$!: Observable<User | null>;
   stats$!: Observable<DashboardStats>;
   investments$!: Observable<Investment[]>;
+  isMobileMenuOpen = false;
   showModal = false;
   investmentTypes = INVESTMENT_TYPES;
   newInvestment = { type: 'Mutual Fund', name: '', amount: 0, returnPct: undefined as number | undefined };

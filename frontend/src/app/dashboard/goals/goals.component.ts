@@ -15,11 +15,14 @@ import { FormsModule } from '@angular/forms';
       user: user$ | async,
       stats: stats$ | async
     } as data">
-      <app-sidebar></app-sidebar>
+      <app-sidebar [isMobileOpen]="isMobileMenuOpen" (closeMobile)="isMobileMenuOpen = false"></app-sidebar>
 
       <div class="main-content">
         <header class="top-header">
           <div class="header-left">
+            <button class="menu-trigger" (click)="isMobileMenuOpen = !isMobileMenuOpen">
+                  <i class="ph ph-list"></i>
+            </button>
             <h1>Your Goals</h1>
             <p>Save for what matters most</p>
           </div>
@@ -132,17 +135,17 @@ import { FormsModule } from '@angular/forms';
     .goal-hero-card { padding: 40px; position: relative; overflow: hidden; }
     .goal-hero-content { display: flex; gap: 48px; align-items: center; margin-bottom: 40px; }
     
-    .goal-info { flex: 1; }
+    .goal-info { flex: 1; width: 100%; }
     .goal-info h2 { font-size: 28px; color: var(--text-dark); margin-bottom: 12px; }
     .goal-desc { color: var(--text-muted); line-height: 1.6; margin-bottom: 28px; max-width: 400px; }
 
-    .goal-stats-row { display: flex; gap: 36px; margin-bottom: 32px; }
-    .stat-item { display: flex; flex-direction: column; gap: 4px; }
+    .goal-stats-row { display: flex; gap: 36px; margin-bottom: 32px; flex-wrap: wrap; }
+    .stat-item { display: flex; flex-direction: column; gap: 4px; min-width: 100px; }
     .stat-item .label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
     .stat-item .value { font-size: 20px; font-weight: 700; color: var(--text-dark); }
     .stat-item .value.success { color: var(--success-green); }
 
-    .fund-action { display: flex; gap: 12px; align-items: center; }
+    .fund-action { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
     .fund-input-group { position: relative; }
     .currency-label { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-weight: 600; }
     .fund-input-group input { padding: 12px 14px 12px 30px; border-radius: 12px; border: 1px solid var(--border-light); font-size: 14px; width: 140px; outline: none; background: var(--bg-input); color: var(--text-dark); }
@@ -181,14 +184,39 @@ import { FormsModule } from '@angular/forms';
     .mini-progress { height: 5px; background: var(--bg-chip); border-radius: 3px; overflow: hidden; }
     .mini-progress .fill { height: 100%; background: var(--primary-blue); border-radius: 3px; }
 
+    .menu-trigger {
+        background: none;
+        border: none;
+        color: var(--text-main);
+        font-size: 24px;
+        cursor: pointer;
+        padding: 4px;
+        display: none;
+        align-items: center;
+        justify-content: center;
+    }
+
     @media (max-width: 900px) {
-      .goal-hero-content { flex-direction: column; }
+      .goal-hero-content { flex-direction: column; text-align: center; }
+      .goal-stats-row { justify-content: center; }
+      .fund-action { justify-content: center; }
+    }
+
+    @media (max-width: 768px) {
+        .menu-trigger {
+            display: flex;
+        }
+        
+        .goal-hero-card {
+            padding: 24px;
+        }
     }
   `]
 })
 export class GoalsComponent implements OnInit {
   user$!: Observable<User | null>;
   stats$!: Observable<DashboardStats>;
+  isMobileMenuOpen = false;
   fundAmount: number = 0;
 
   constructor(private expenseService: ExpenseService) { }

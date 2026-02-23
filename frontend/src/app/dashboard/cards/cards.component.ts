@@ -10,23 +10,27 @@ import { FormsModule } from '@angular/forms';
 @Component({
   selector: 'app-cards',
   standalone: true,
-  imports: [CommonModule, SidebarComponent, FormsModule, RouterLink],
+  imports: [CommonModule, SidebarComponent, FormsModule],
   template: `
+
     <main class="dashboard-layout" *ngIf="{
       user: user$ | async,
       stats: stats$ | async
     } as data">
-      <app-sidebar></app-sidebar>
+      <app-sidebar [isMobileOpen]="isMobileMenuOpen" (closeMobile)="isMobileMenuOpen = false"></app-sidebar>
 
       <div class="main-content">
         <header class="top-header">
           <div class="header-left">
+            <button class="menu-trigger" (click)="isMobileMenuOpen = !isMobileMenuOpen">
+                <i class="ph ph-list"></i>
+            </button>
             <h1>My Cards & Banks</h1>
             <p>Manage your linked bank accounts and cards</p>
           </div>
           <div class="header-right">
-            <button class="primary-btn" routerLink="/settings">
-              <i class="ph ph-plus"></i> Add Bank Account
+            <button class="primary-btn" (click)="showAddBankModal = true">
+              <i class="ph ph-plus"></i> <span class="btn-label">Add Bank Account</span>
             </button>
             <div class="fallback-header-avatar">
               <i class="ph ph-user"></i>
@@ -74,7 +78,7 @@ import { FormsModule } from '@angular/forms';
             </div>
 
             <!-- Add Bank Placeholder -->
-            <div class="bank-card add-bank-card" routerLink="/settings">
+            <div class="bank-card add-bank-card" (click)="showAddBankModal = true">
               <i class="ph ph-plus-circle add-icon"></i>
               <p>Add Bank Account</p>
             </div>
@@ -84,7 +88,7 @@ import { FormsModule } from '@angular/forms';
             <div class="empty-state">
               <i class="ph ph-bank"></i>
               <p>No bank accounts linked yet.</p>
-              <a routerLink="/settings" class="primary-btn" style="display: inline-flex; margin-top: 16px; text-decoration: none;">Add Your First Bank</a>
+              <button (click)="showAddBankModal = true" class="primary-btn" style="display: inline-flex; margin-top: 16px;">Add Your First Bank</button>
             </div>
           </ng-template>
 
@@ -115,13 +119,36 @@ import { FormsModule } from '@angular/forms';
           </div>
         </div>
       </div>
+
+      <!-- Add Bank Modal (Copy of Dashboard styles/structure for consistency) -->
+      <div class="modal-overlay" *ngIf="showAddBankModal" (click)="showAddBankModal = false">
+        <div class="modal-card" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3>Add Bank Account</h3>
+                <button class="close-btn" (click)="showAddBankModal = false"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <form class="modal-form" (submit)="onAddBank(newBankName.value); $event.preventDefault()">
+                    <div class="form-group">
+                        <label>Bank Name</label>
+                        <input type="text" #newBankName placeholder="e.g. HDFC Bank, ICICI Bank">
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn outline" (click)="showAddBankModal = false">Cancel</button>
+                        <button type="submit" class="btn primary">Add Bank</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+      </div>
     </main>
   `,
+
   styles: [`
     .section-title { font-size: 18px; font-weight: 700; color: var(--text-dark); margin-bottom: 20px; }
 
     .premium-card {
-      width: 420px; height: 250px;
+      width: 100%; max-width: 420px; height: 250px;
       background: linear-gradient(135deg, #1e293b, #0f172a, #312e81);
       border-radius: 24px; padding: 36px; color: white;
       display: flex; flex-direction: column; justify-content: space-between;
@@ -133,12 +160,12 @@ import { FormsModule } from '@angular/forms';
     .card-top { display: flex; justify-content: space-between; align-items: center; }
     .card-chip { width: 50px; height: 38px; background: linear-gradient(135deg, #fbbf24, #f59e0b); border-radius: 8px; }
     .contactless { font-size: 24px; opacity: 0.5; }
-    .card-number { font-size: 22px; letter-spacing: 4px; font-weight: 500; font-family: 'Courier New', monospace; }
-    .card-details { display: flex; gap: 40px; }
+    .card-number { font-size: 20px; letter-spacing: 2px; font-weight: 500; font-family: 'Courier New', monospace; margin: 20px 0; }
+    .card-details { display: flex; gap: 20px; flex-wrap: wrap; }
     .detail { display: flex; flex-direction: column; gap: 4px; }
     .detail .label { font-size: 10px; opacity: 0.5; text-transform: uppercase; letter-spacing: 1px; }
-    .detail .value { font-size: 14px; font-weight: 600; }
-    .card-type { position: absolute; right: 36px; bottom: 36px; font-size: 24px; font-weight: 800; font-style: italic; opacity: 0.4; }
+    .detail .value { font-size: 12px; font-weight: 600; }
+    .card-type { position: absolute; right: 28px; bottom: 28px; font-size: 20px; font-weight: 800; font-style: italic; opacity: 0.4; }
 
     .banks-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
     .bank-card { border-radius: 20px; padding: 28px; color: white; min-height: 160px; display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; transition: transform var(--transition-fast); }
@@ -157,11 +184,50 @@ import { FormsModule } from '@angular/forms';
     .control-item { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--border-light); }
     .control-info { display: flex; align-items: center; gap: 12px; font-weight: 500; color: var(--text-dark); }
     .control-info i { font-size: 20px; color: var(--text-muted); }
+
+    .menu-trigger {
+        background: none;
+        border: none;
+        color: var(--text-main);
+        font-size: 24px;
+        cursor: pointer;
+        padding: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    @media (max-width: 900px) {
+        .banks-grid {
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        }
+        .premium-card {
+            max-width: 100%;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .premium-card {
+            padding: 24px;
+            height: 220px;
+        }
+        .card-number {
+            font-size: 18px;
+        }
+        .banks-grid {
+            grid-template-columns: 1fr;
+        }
+    }
   `]
+
 })
 export class CardsComponent implements OnInit {
   user$!: Observable<User | null>;
   stats$!: Observable<DashboardStats>;
+  isMobileMenuOpen = false;
+  showAddBankModal = false;
+
   bankGradients = [
     'linear-gradient(135deg, #3b82f6, #1d4ed8)',
     'linear-gradient(135deg, #10b981, #059669)',
@@ -177,4 +243,11 @@ export class CardsComponent implements OnInit {
     this.user$ = this.expenseService.getUser();
     this.stats$ = this.expenseService.getStats();
   }
+
+  onAddBank(name: string) {
+    if (!name) return;
+    this.expenseService.addBank(name);
+    this.showAddBankModal = false;
+  }
 }
+

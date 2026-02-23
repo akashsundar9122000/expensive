@@ -19,6 +19,7 @@ public class ExpenseService {
     private final SubscriptionRepository subscriptionRepository;
     private final UserPreferenceRepository userPreferenceRepository;
     private final InvestmentRepository investmentRepository;
+    private final BudgetRepository budgetRepository;
 
     public List<Transaction> getTransactions(User user) {
         return transactionRepository.findByUserOrderByDateDesc(user);
@@ -144,5 +145,22 @@ public class ExpenseService {
                         && t.getDate().getMonthValue() == now.getMonthValue())
                 .map(Transaction::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    public List<Budget> getBudgets(User user) {
+        return budgetRepository.findByUser(user);
+    }
+
+    @Transactional
+    public Budget saveBudget(User user, String category, BigDecimal limitAmount) {
+        Budget budget = budgetRepository.findByUserAndCategory(user, category)
+                .orElse(Budget.builder().user(user).category(category).build());
+        budget.setLimitAmount(limitAmount);
+        return budgetRepository.save(budget);
+    }
+
+    @Transactional
+    public void deleteBudget(User user, String category) {
+        budgetRepository.deleteByUserAndCategory(user, category);
     }
 }

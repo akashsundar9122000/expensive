@@ -15,22 +15,25 @@ import { FormsModule } from '@angular/forms';
       user: user$ | async,
       transactions: filteredTransactions$ | async
     } as data">
-      <app-sidebar></app-sidebar>
+      <app-sidebar [isMobileOpen]="isMobileMenuOpen" (closeMobile)="isMobileMenuOpen = false"></app-sidebar>
 
       <div class="main-content">
         <header class="top-header">
           <div class="header-left">
+            <button class="menu-trigger" (click)="isMobileMenuOpen = true">
+                  <i class="ph ph-list"></i>
+            </button>
             <h1>All Expenses</h1>
             <p>Manage and filter your transaction history</p>
           </div>
 
           <div class="header-right">
             <div class="search-box">
+              <i class="ph ph-magnifying-glass search-icon"></i>
               <input type="text" 
                      placeholder="Search merchant or category..." 
                      [ngModel]="searchQuery$ | async"
                      (ngModelChange)="updateSearch($event)">
-              <button class="search-btn"><i class="ph ph-magnifying-glass"></i></button>
             </div>
 
             <div class="fallback-header-avatar">
@@ -41,7 +44,7 @@ import { FormsModule } from '@angular/forms';
 
         <div class="dashboard-body">
           <div class="card table-card">
-            <div class="flex-between" style="margin-bottom: 20px;">
+            <div class="flex-between filter-section">
               <div class="filter-tabs">
                 <button class="filter-tab" 
                         [class.active]="(categoryFilter$ | async) === 'All'"
@@ -63,7 +66,7 @@ import { FormsModule } from '@angular/forms';
                         (click)="updateCategory('Bills')">Bills</button>
               </div>
               <button class="outline-btn export-btn" (click)="exportCSV(data.transactions || [])">
-                <i class="ph ph-download-simple"></i> Export CSV
+                <i class="ph ph-download-simple"></i> <span class="btn-text">Export CSV</span>
               </button>
             </div>
 
@@ -74,8 +77,8 @@ import { FormsModule } from '@angular/forms';
                     <th>Amount</th>
                     <th>Category</th>
                     <th>Merchant</th>
-                    <th>Date</th>
-                    <th>Mode</th>
+                    <th class="hide-mobile">Date</th>
+                    <th class="hide-mobile">Mode</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -88,8 +91,8 @@ import { FormsModule } from '@angular/forms';
                       </span>
                     </td>
                     <td>{{ t.subCategory }}</td>
-                    <td>{{ t.date }}</td>
-                    <td>
+                    <td class="hide-mobile">{{ t.date }}</td>
+                    <td class="hide-mobile">
                       <span class="mode-chip" [ngClass]="{
                         'bank-mode': t.mode === 'Bank',
                         'upi-mode': t.mode === 'UPI',
@@ -122,13 +125,106 @@ import { FormsModule } from '@angular/forms';
     .amount-text { color: var(--text-dark); }
     .category-badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
     .table-row-animate { animation: fadeIn 0.3s ease; }
-    .export-btn { font-size: 13px; padding: 8px 16px; }
+    .export-btn { font-size: 13px; padding: 8px 16px; display: flex; align-items: center; gap: 8px; }
+    
+    .menu-trigger {
+        background: none;
+        border: none;
+        color: var(--text-main);
+        font-size: 24px;
+        cursor: pointer;
+        padding: 4px;
+        display: none;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .search-box {
+        position: relative;
+    }
+
+    .search-icon {
+        position: absolute;
+        left: 14px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+    }
+
+    .search-box input {
+        padding-left: 40px !important;
+    }
+
+    @media (max-width: 768px) {
+        .menu-trigger {
+            display: flex;
+        }
+        
+        .main-content {
+            margin-left: 0;
+        }
+
+        .top-header {
+            padding: 0 20px;
+            height: 70px;
+        }
+
+        .header-left h1 {
+            font-size: 18px;
+        }
+
+        .header-left p, .header-meta {
+            display: none;
+        }
+
+        .dashboard-body {
+            padding: 20px;
+        }
+
+        .filter-section {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .filter-tabs {
+            width: 100%;
+            overflow-x: auto;
+            padding-bottom: 8px;
+            white-space: nowrap;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .filter-tabs::-webkit-scrollbar {
+            height: 4px;
+        }
+
+        .hide-mobile {
+            display: none;
+        }
+
+        .btn-text {
+            display: none;
+        }
+
+        .export-btn {
+            padding: 8px;
+            border-radius: 50%;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .search-box {
+            display: none;
+        }
+    }
   `]
 })
 export class AllExpensesComponent implements OnInit {
   user$!: Observable<User | null>;
   searchQuery$ = new BehaviorSubject<string>('');
   categoryFilter$ = new BehaviorSubject<string>('All');
+  isMobileMenuOpen = false;
   filteredTransactions$!: Observable<Transaction[]>;
 
   private categoryColors: Record<string, { bg: string; color: string }> = {

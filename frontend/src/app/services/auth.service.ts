@@ -54,9 +54,18 @@ export class AuthService {
     updateUserInfo(updates: Partial<User>) {
         const user = this.currentUserSubject.value;
         if (user) {
+            // Update local state first for instant feedback
             const updatedUser = { ...user, ...updates };
             this.currentUserSubject.next(updatedUser);
             localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+
+            // Persist to backend
+            this.http.put(`${this.apiUrl}/profile`, {
+                name: updates.name,
+                avatarUrl: updates.avatar
+            }).subscribe({
+                error: (err) => console.error('Failed to update profile on backend:', err)
+            });
         }
     }
 

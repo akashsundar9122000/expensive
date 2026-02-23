@@ -13,12 +13,15 @@ import { FormsModule } from '@angular/forms';
   standalone: true,
   imports: [CommonModule, SidebarComponent, FormsModule],
   template: `
-    <main class="dashboard-layout" *ngIf="user$ | async as user">
-      <app-sidebar></app-sidebar>
+    <main class="dashboard-layout">
+      <app-sidebar [isMobileOpen]="isMobileMenuOpen" (closeMobile)="isMobileMenuOpen = false"></app-sidebar>
 
       <div class="main-content">
         <header class="top-header">
           <div class="header-left">
+            <button class="menu-trigger" (click)="isMobileMenuOpen = !isMobileMenuOpen">
+                <i class="ph ph-list"></i>
+            </button>
             <h1>Settings</h1>
             <p>Manage your account preferences</p>
           </div>
@@ -29,25 +32,45 @@ import { FormsModule } from '@angular/forms';
             <div class="card profile-card">
               <div class="profile-preview">
                 <div class="avatar-container">
-                  <img *ngIf="user.avatar; else fallbackAvatar" [src]="user.avatar" alt="Avatar">
+                  <img *ngIf="(user$ | async)?.avatar; else fallbackAvatar" [src]="(user$ | async)?.avatar" alt="Avatar">
                   <ng-template #fallbackAvatar>
                     <div class="fallback-avatar">
                       <i class="ph ph-user"></i>
                     </div>
                   </ng-template>
                 </div>
-                <h3>{{ user.name }}</h3>
-                <p>{{ user.email }}</p>
+                <h3>{{ (user$ | async)?.name || 'User' }}</h3>
+                <p>{{ (user$ | async)?.email || '' }}</p>
               </div>
 
               <div class="profile-actions">
-                <label>Profile Picture URL</label>
-                <div class="input-group">
-                  <input type="text" [(ngModel)]="avatarUrl" placeholder="https://image.url">
-                  <button class="primary-btn" (click)="updateAvatar()">Update</button>
+                <div class="form-group" style="margin-bottom: 24px;">
+                    <label>Display Name</label>
+                    <div class="input-group">
+                        <input type="text" [(ngModel)]="newUserName" placeholder="Your Name">
+                        <button class="primary-btn" (click)="updateName()">Update</button>
+                    </div>
+                </div>
+
+                <label>Select Avatar</label>
+                <div class="avatar-grid">
+                    <div class="avatar-option" *ngFor="let av of avatars" 
+                         [class.selected]="(user$ | async)?.avatar === av"
+                         (click)="selectAvatar(av)">
+                        <img [src]="av" alt="Avatar">
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-top: 24px;">
+                    <label>Custom Avatar URL</label>
+                    <div class="input-group">
+                      <input type="text" [(ngModel)]="avatarUrl" placeholder="https://image.url">
+                      <button class="outline-btn" (click)="updateAvatar()">Set</button>
+                    </div>
                 </div>
               </div>
             </div>
+
 
             <div class="card settings-list">
               <div class="bank-management">
@@ -55,14 +78,14 @@ import { FormsModule } from '@angular/forms';
                 <p class="sub-text">Add your bank accounts to track balances</p>
                 
                 <div class="bank-list">
-                  <div class="bank-item" *ngFor="let bank of user.bankAccounts">
+                  <div class="bank-item" *ngFor="let bank of (user$ | async)?.bankAccounts || []">
                     <div class="bank-info">
                        <i class="ph ph-bank"></i>
                        <span>{{ bank }}</span>
                     </div>
                     <span class="bank-balance-text">₹{{ (stats$ | async)?.bankBalances?.[bank] || 0 | number }}</span>
                   </div>
-                  <p *ngIf="user.bankAccounts.length === 0" class="no-banks">No bank accounts added.</p>
+                  <p *ngIf="!((user$ | async)?.bankAccounts?.length)" class="no-banks">No bank accounts added.</p>
                 </div>
 
                 <div class="input-group">
@@ -118,7 +141,7 @@ import { FormsModule } from '@angular/forms';
     </main>
   `,
   styles: [`
-    .settings-grid { display: grid; grid-template-columns: 340px 1fr; gap: 32px; }
+    .settings-grid { display: grid; grid-template-columns: 1fr 1.5fr; gap: 24px; }
     .profile-card { padding: 36px; text-align: center; }
     .avatar-container { margin-bottom: 20px; display: flex; justify-content: center; }
     .avatar-container img, .fallback-avatar { 
@@ -134,6 +157,16 @@ import { FormsModule } from '@angular/forms';
 
     .profile-actions { text-align: left; margin-top: 24px; }
     .profile-actions label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 8px; color: var(--text-muted); }
+
+    .avatar-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 8px; }
+    .avatar-option { 
+        width: 100%; aspect-ratio: 1; border-radius: 12px; overflow: hidden; 
+        cursor: pointer; border: 2px solid transparent; transition: all 0.2s;
+        background: var(--bg-chip);
+    }
+    .avatar-option:hover { transform: scale(1.05); }
+    .avatar-option.selected { border-color: var(--primary-blue); }
+    .avatar-option img { width: 100%; height: 100%; object-fit: cover; }
 
     .settings-list { padding: 36px; }
     .sub-text { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
@@ -155,16 +188,55 @@ import { FormsModule } from '@angular/forms';
 
     .danger-btn { display: flex; align-items: center; justify-content: center; gap: 8px; }
 
+    .menu-trigger {
+        background: none;
+        border: none;
+        color: var(--text-main);
+        font-size: 24px;
+        cursor: pointer;
+        padding: 4px;
+        align-items: center;
+        justify-content: center;
+    }
+
     @media (max-width: 900px) {
       .settings-grid { grid-template-columns: 1fr; }
     }
+
+    @media (max-width: 768px) {
+        .menu-trigger {
+            display: flex !important;
+        }
+        
+        .profile-card, .settings-list {
+            padding: 24px;
+        }
+        
+        .avatar-grid {
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+        }
+    }
   `]
+
 })
 export class SettingsComponent implements OnInit {
   user$!: Observable<User | null>;
   stats$!: Observable<DashboardStats>;
   avatarUrl: string = '';
+  newUserName: string = '';
   newBankName: string = '';
+  isMobileMenuOpen = false;
+
+  avatars = [
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=Aria',
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=Jack',
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=Luna',
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=Milo',
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=Zoe',
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=Leo',
+    'https://api.dicebear.com/7.x/avataaars/svg?seed=Maya',
+  ];
 
   constructor(
     private expenseService: ExpenseService,
@@ -176,13 +248,28 @@ export class SettingsComponent implements OnInit {
     this.user$ = this.expenseService.getUser();
     this.stats$ = this.expenseService.getStats();
     this.user$.subscribe(user => {
-      if (user) this.avatarUrl = user.avatar || '';
+      if (user) {
+        this.avatarUrl = user.avatar || '';
+        this.newUserName = user.name || '';
+      }
     });
   }
 
   updateAvatar() {
     this.authService.updateUserInfo({ avatar: this.avatarUrl });
   }
+
+  selectAvatar(url: string) {
+    this.avatarUrl = url;
+    this.updateAvatar();
+  }
+
+  updateName() {
+    if (this.newUserName.trim()) {
+      this.authService.updateUserInfo({ name: this.newUserName.trim() });
+    }
+  }
+
 
   addBank() {
     if (this.newBankName.trim()) {
