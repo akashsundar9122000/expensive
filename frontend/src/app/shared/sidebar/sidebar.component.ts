@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges, OnDestroy, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
@@ -77,9 +77,11 @@ import { Observable } from 'rxjs';
         flex-direction: column;
         padding: 28px 20px;
         position: fixed;
-        height: 100vh;
+        height: 100dvh;
         left: 0;
         top: 0;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
         transition: transform var(--transition-normal), background-color var(--transition-normal), border-color var(--transition-normal);
         z-index: 100;
     }
@@ -315,16 +317,32 @@ import { Observable } from 'rxjs';
   `]
 
 })
-export class SidebarComponent {
+export class SidebarComponent implements OnChanges, OnDestroy {
     @Input() isMobileOpen = false;
     @Output() closeMobile = new EventEmitter<void>();
     user$: Observable<User | null>;
+    private bodyOverflowBeforeOpen = '';
 
     constructor(
         private authService: AuthService,
         public themeService: ThemeService
     ) {
         this.user$ = this.authService.getCurrentUser();
+    }
+
+    ngOnChanges(changes: SimpleChanges): void {
+        if (!('isMobileOpen' in changes)) return;
+
+        if (this.isMobileOpen && window.innerWidth <= 768) {
+            this.lockBodyScroll();
+            return;
+        }
+
+        this.unlockBodyScroll();
+    }
+
+    ngOnDestroy(): void {
+        this.unlockBodyScroll();
     }
 
 
@@ -334,5 +352,17 @@ export class SidebarComponent {
 
     logout() {
         this.authService.logout();
+    }
+
+    private lockBodyScroll() {
+        if (!this.bodyOverflowBeforeOpen) {
+            this.bodyOverflowBeforeOpen = document.body.style.overflow;
+        }
+        document.body.style.overflow = 'hidden';
+    }
+
+    private unlockBodyScroll() {
+        document.body.style.overflow = this.bodyOverflowBeforeOpen;
+        this.bodyOverflowBeforeOpen = '';
     }
 }

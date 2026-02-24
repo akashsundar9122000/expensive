@@ -20,7 +20,7 @@ import { FormsModule } from '@angular/forms';
         <header class="top-header">
           <div class="header-left">
             <button class="menu-trigger" (click)="isMobileMenuOpen = !isMobileMenuOpen">
-                <i class="ph ph-list"></i>
+              <i class="ph ph-list"></i>
             </button>
             <h1>Settings</h1>
             <p>Manage your account preferences</p>
@@ -110,7 +110,11 @@ import { FormsModule } from '@angular/forms';
                         <button class="icon-btn edit-btn" (click)="startEdit(bank)" title="Edit">
                           <i class="ph ph-pencil-simple"></i>
                         </button>
-                        <button class="icon-btn delete-btn" (click)="deleteBank(bank)" title="Delete">
+                        <button
+                          class="icon-btn delete-btn"
+                          (click)="deleteBank(bank)"
+                          [disabled]="(banks$ | async)?.length === 1"
+                          [title]="(banks$ | async)?.length === 1 ? 'At least one bank is required' : 'Delete'">
                           <i class="ph ph-trash"></i>
                         </button>
                       </div>
@@ -278,6 +282,7 @@ import { FormsModule } from '@angular/forms';
         font-size: 24px;
         cursor: pointer;
         padding: 4px;
+      display: none;
         align-items: center;
         justify-content: center;
     }
@@ -372,6 +377,7 @@ export class SettingsComponent implements OnInit {
   editingBankBalance: number | null = null;
   showDeleteConfirm = false;
   bankToDelete: Bank | null = null;
+  bankCount = 0;
 
   avatars = [
     'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
@@ -393,6 +399,14 @@ export class SettingsComponent implements OnInit {
   ngOnInit() {
     this.user$ = this.expenseService.getUser();
     this.banks$ = this.expenseService.getBanks();
+
+    this.banks$.subscribe(banks => {
+      this.bankCount = banks?.length || 0;
+      if (this.bankCount <= 1 && this.showDeleteConfirm) {
+        this.cancelDelete();
+      }
+    });
+
     this.user$.subscribe(user => {
       if (user) {
         this.avatarUrl = user.avatar || '';
@@ -449,11 +463,20 @@ export class SettingsComponent implements OnInit {
   }
 
   deleteBank(bank: Bank) {
+    if (this.bankCount <= 1) {
+      alert('At least one bank account is required.');
+      return;
+    }
     this.bankToDelete = bank;
     this.showDeleteConfirm = true;
   }
 
   confirmDelete() {
+    if (this.bankCount <= 1) {
+      alert('At least one bank account is required.');
+      this.cancelDelete();
+      return;
+    }
     if (this.bankToDelete) {
       this.expenseService.deleteBank(this.bankToDelete.id);
     }

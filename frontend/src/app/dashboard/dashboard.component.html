@@ -66,10 +66,13 @@
                             <i class="ph ph-wallet"></i>
                         </div>
                         <div class="bank-selector-wrap">
-                            <button class="bank-pill" (click)="showBankSelector = !showBankSelector">
+                            <button class="bank-pill" *ngIf="data.banks && data.banks.length > 0" (click)="showBankSelector = !showBankSelector">
                                 {{ selectedBank }} <i class="ph ph-caret-down"></i>
                             </button>
-                            <div class="bank-dropdown" *ngIf="showBankSelector">
+                            <button class="bank-pill" *ngIf="!data.banks || data.banks.length === 0" (click)="showAddBankModal = true">
+                                <i class="ph ph-plus"></i> Add Bank
+                            </button>
+                            <div class="bank-dropdown" *ngIf="showBankSelector && data.banks && data.banks.length > 0">
                                 <a *ngFor="let bank of data.banks"
                                     [class.active]="bank.name === selectedBank"
                                     (click)="selectBank(bank.name)">
@@ -210,9 +213,9 @@
                         </div>
                         <div class="chart-bars">
                             <div class="bar-col" *ngFor="let bar of chartBars" [attr.data-amount]="bar.amount | number:'1.2-2'">
-                                <div class="bar-wrapper" [title]="'₹' + (bar.amount | number:'1.2-2')">
+                                <div class="bar-wrapper" [attr.title]="bar.amount > 0 ? ('₹' + (bar.amount | number:'1.2-2')) : null">
                                     <div class="bar" [class.active]="bar.active" [style.height.%]="bar.height"></div>
-                                    <div class="bar-tooltip">₹{{ bar.amount | number:'1.0-0' }}</div>
+                                    <div class="bar-tooltip" *ngIf="bar.amount > 0">₹{{ bar.amount | number:'1.0-0' }}</div>
                                 </div>
                                 <span>{{ bar.label }}</span>
                             </div>

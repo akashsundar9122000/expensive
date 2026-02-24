@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { BehaviorSubject, Observable, forkJoin, tap, take, catchError, of, throwError } from 'rxjs';
 import { Transaction, Subscription, Investment, DashboardStats, User, Budget, Bank } from './models';
 import { AuthService } from './auth.service';
@@ -111,13 +111,22 @@ export class ExpenseService {
     }
 
     addTransaction(transaction: Omit<Transaction, 'id'>, bankName?: string) {
-        const bank = encodeURIComponent(bankName || 'SBI');
+        const selectedBank = (bankName || '').trim() || this.banks.getValue()[0]?.name;
+        if (!selectedBank) {
+            console.error('Failed to add transaction: no bank account available');
+            return;
+        }
+        const bank = encodeURIComponent(selectedBank);
         this.http.post<Transaction>(`${this.apiUrl}/transactions?bankName=${bank}`, transaction)
             .subscribe({
                 next: (newTx) => {
+                    const transactionWithBank: Transaction = {
+                        ...newTx,
+                        bankName: newTx.bankName || selectedBank
+                    };
                     // Optimistic update: immediately prepend to local list so UI reflects instantly
                     const current = this.transactions.getValue();
-                    this.transactions.next([newTx, ...current]);
+                    this.transactions.next([transactionWithBank, ...current]);
                     // Full refresh in background for balance/stats sync
                     this.refreshAllData();
                 },
@@ -162,15 +171,38 @@ export class ExpenseService {
 
     editSubscription(id: number, sub: Omit<Subscription, 'id'>): Observable<Subscription> {
         console.log('Calling editSubscription with ID:', id, 'Payload:', sub);
-        return this.http.put<Subscription>(`${this.apiUrl}/subscriptions/${id}`, sub).pipe(
+        const token = localStorage.getItem('token');
+        const headers = token
+            ? new HttpHeaders({ Authorization: `Bearer ${token}` })
+            : undefined;
+
+        return this.http.put<Subscription>(`${this.apiUrl}/subscriptions?id=${id}`, sub, { headers }).pipe(
             tap((response) => {
                 console.log('EditSubscription response:', response);
                 // Ensure UI updates by triggering a fresh load
                 setTimeout(() => this.refreshAllData(), 100);
             }),
             catchError((error) => {
-                console.error('EditSubscription error:', error);
-                return throwError(() => error);
+                console.error('EditSubscription primary route failed, trying fallback route:', error);
+                return this.http.put<Subscription>(`${this.apiUrl}/subscriptions/${id}`, sub, { headers }).pipe(
+                    tap((response) => {
+                        console.log('EditSubscription fallback response:', response);
+                        setTimeout(() => this.refreshAllData(), 100);
+                    }),
+                    catchError((fallbackError) => {
+                        console.error('EditSubscription second route failed, trying POST fallback:', fallbackError);
+                        return this.http.post<Subscription>(`${this.apiUrl}/subscriptions/update?id=${id}`, sub, { headers }).pipe(
+                            tap((response) => {
+                                console.log('EditSubscription POST fallback response:', response);
+                                setTimeout(() => this.refreshAllData(), 100);
+                            }),
+                            catchError((postFallbackError) => {
+                                console.error('EditSubscription POST fallback error:', postFallbackError);
+                                return throwError(() => postFallbackError);
+                            })
+                        );
+                    })
+                );
             })
         );
     }

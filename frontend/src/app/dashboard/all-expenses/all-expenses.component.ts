@@ -152,7 +152,7 @@ import * as XLSX from 'xlsx';
                         <button class="edit-btn" (click)="editTransaction(t)" title="Edit">
                           <i class="ph ph-pencil"></i>
                         </button>
-                        <button class="delete-btn" (click)="deleteTransaction(t.id)" title="Delete">
+                        <button class="delete-btn" (click)="deleteTransaction(t)" title="Delete">
                           <i class="ph ph-trash"></i>
                         </button>
                       </div>
@@ -241,15 +241,46 @@ import * as XLSX from 'xlsx';
                 <div class="form-group">
                     <label>Bank Account</label>
                     <select formControlName="bank">
+                    <option value="" disabled *ngIf="(banks$ | async)?.length === 0">No bank accounts available</option>
                         <option *ngFor="let bank of (banks$ | async)" [value]="bank.name">{{bank.name}}</option>
                     </select>
+                  <p *ngIf="currentBanks.length === 0" style="font-size: 12px; color: var(--text-muted); margin-top: 6px;">
+                    Please add a bank account from Settings or Dashboard first.
+                  </p>
                 </div>
-                <button type="submit" class="primary-btn" [disabled]="expenseForm.invalid" style="width: 100%; justify-content: center; margin-top: 10px;">
+                <button type="submit" class="primary-btn" [disabled]="expenseForm.invalid || currentBanks.length === 0" style="width: 100%; justify-content: center; margin-top: 10px;">
                     <i class="ph" [ngClass]="editingTransactionId ? 'ph-check' : 'ph-plus'"></i> 
                     {{ editingTransactionId ? 'Update Transaction' : 'Add Transaction' }}
                 </button>
             </form>
         </div>
+    </div>
+
+    <div class="toast-container" *ngIf="toast.show" [class]="toast.type">
+      <div class="toast-content">
+        <i class="ph" [class]="toast.type === 'danger' ? 'ph-warning-octagon' : toast.type === 'warning' ? 'ph-warning' : 'ph-check-circle'"></i>
+        <span>{{ toast.message }}</span>
+      </div>
+      <button class="toast-close" (click)="toast.show = false"><i class="ph ph-x"></i></button>
+    </div>
+
+    <div class="confirm-overlay" *ngIf="showDeleteConfirm" (click)="cancelDelete()">
+      <div class="confirm-card" (click)="$event.stopPropagation()">
+        <div class="confirm-icon-wrap">
+          <i class="ph ph-trash"></i>
+        </div>
+        <h3 class="confirm-title">Delete Expense?</h3>
+        <p class="confirm-msg">
+          You're about to delete <strong>{{ transactionToDelete?.subCategory || transactionToDelete?.category || 'this expense' }}</strong>.
+          This action cannot be undone.
+        </p>
+        <div class="confirm-actions">
+          <button class="cancel-action-btn" (click)="cancelDelete()">Cancel</button>
+          <button class="delete-action-btn" (click)="confirmDelete()">
+            <i class="ph ph-trash"></i> Delete
+          </button>
+        </div>
+      </div>
     </div>
   `,
   styles: [`
@@ -265,6 +296,135 @@ import * as XLSX from 'xlsx';
     }
     .table-row-animate { animation: fadeIn 0.3s ease; }
     .export-btn { font-size: 13px; padding: 8px 16px; display: flex; align-items: center; gap: 8px; }
+
+    .toast-container {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 3000;
+      min-width: 280px;
+      max-width: 420px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-light);
+      border-left: 4px solid var(--primary-blue);
+      border-radius: 12px;
+      box-shadow: 0 12px 28px rgba(0,0,0,0.12);
+      padding: 12px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .toast-container.success { border-left-color: #10b981; }
+    .toast-container.warning { border-left-color: #f59e0b; }
+    .toast-container.danger { border-left-color: #ef4444; }
+
+    .toast-content {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-dark);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .toast-close {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 1px;
+    }
+
+    .confirm-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .confirm-card {
+      background: var(--bg-card);
+      border-radius: 24px;
+      padding: 36px 32px;
+      width: 380px;
+      max-width: 92%;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.18);
+      text-align: center;
+      animation: scaleIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .confirm-icon-wrap {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: rgba(239,68,68,0.1);
+      color: #ef4444;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin: 0 auto 20px;
+    }
+
+    .confirm-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-dark);
+      margin-bottom: 12px;
+    }
+
+    .confirm-msg {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+
+    .confirm-msg strong { color: var(--text-dark); }
+
+    .confirm-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .cancel-action-btn {
+      flex: 1;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1.5px solid var(--border-light);
+      background: var(--bg-chip);
+      color: var(--text-dark);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .delete-action-btn {
+      flex: 1;
+      padding: 12px;
+      border-radius: 12px;
+      border: none;
+      background: #ef4444;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
     
     .filter-section {
       display: flex;
@@ -548,6 +708,10 @@ export class AllExpensesComponent implements OnInit {
   filteredTransactions$!: Observable<Transaction[]>;
   editingTransactionId: number | null = null;
   transactionBankMap: Map<number, string> = new Map();
+  currentBanks: Bank[] = [];
+  toast: { show: boolean; message: string; type: 'success' | 'warning' | 'danger' } = { show: false, message: '', type: 'success' };
+  showDeleteConfirm = false;
+  transactionToDelete: Transaction | null = null;
 
   @ViewChild('chartsContainer') chartsContainer!: ElementRef;
   @ViewChild('categoryChart') categoryChart!: ElementRef;
@@ -570,6 +734,17 @@ export class AllExpensesComponent implements OnInit {
     this.user$ = this.expenseService.getUser();
     this.banks$ = this.expenseService.getBanks();
 
+    this.banks$.subscribe(banks => {
+      this.currentBanks = banks || [];
+      const selectedBank = this.expenseForm.get('bank')?.value;
+      if ((!selectedBank || !this.currentBanks.some(b => b.name === selectedBank)) && this.currentBanks.length > 0) {
+        this.expenseForm.patchValue({ bank: this.currentBanks[0].name });
+      }
+      if (this.currentBanks.length === 0) {
+        this.expenseForm.patchValue({ bank: '' });
+      }
+    });
+
     // Store bank information for transactions
     this.expenseService.getTransactions().pipe(take(1)).subscribe(transactions => {
       transactions.forEach(t => {
@@ -587,6 +762,7 @@ export class AllExpensesComponent implements OnInit {
       this.monthFilter$
     ]).pipe(
       map(([transactions, query, category, bank, mode, month]) => {
+        this.syncTransactionBankMap(transactions);
         return transactions.filter(t => {
           const matchesQuery = !query ||
             (t.subCategory && t.subCategory.toLowerCase().includes(query.toLowerCase())) ||
@@ -599,6 +775,14 @@ export class AllExpensesComponent implements OnInit {
         });
       })
     );
+  }
+
+  private syncTransactionBankMap(transactions: Transaction[]) {
+    (transactions || []).forEach(t => {
+      if (t?.bankName) {
+        this.transactionBankMap.set(t.id, t.bankName);
+      }
+    });
   }
 
   getCategoryColor(category: string) {
@@ -715,7 +899,7 @@ export class AllExpensesComponent implements OnInit {
   getTransactionBank(transactionId: number): string {
     // This will be populated from the transaction service
     // For now, return a placeholder - in a real app, this should come from the backend
-    return this.transactionBankMap.get(transactionId) || 'SBI';
+    return this.transactionBankMap.get(transactionId) || '';
   }
 
   editTransaction(transaction: Transaction) {
@@ -726,19 +910,33 @@ export class AllExpensesComponent implements OnInit {
       subCategory: transaction.subCategory,
       date: transaction.date,
       mode: transaction.mode,
-      bank: this.getTransactionBank(transaction.id)
+      bank: this.getTransactionBank(transaction.id) || this.currentBanks[0]?.name || ''
     });
     this.showModal = true;
   }
 
-  deleteTransaction(id: number) {
-    if (confirm('Are you sure you want to delete this transaction?')) {
-      this.expenseService.deleteTransaction(id);
+  deleteTransaction(transaction: Transaction) {
+    this.transactionToDelete = transaction;
+    this.showDeleteConfirm = true;
+  }
+
+  confirmDelete() {
+    if (this.transactionToDelete) {
+      this.expenseService.deleteTransaction(this.transactionToDelete.id);
     }
+    this.cancelDelete();
+  }
+
+  cancelDelete() {
+    this.showDeleteConfirm = false;
+    this.transactionToDelete = null;
   }
 
   exportCSV(transactions: Transaction[]) {
-    if (!transactions.length) return;
+    if (!transactions.length) {
+      this.showToast('No transactions to export', 'warning');
+      return;
+    }
     const headers = ['Amount', 'Category', 'Merchant', 'Date', 'Mode'];
     const rows = transactions.map(t => [t.amount, t.category, t.subCategory, t.date, t.mode].join(','));
     const csv = [headers.join(','), ...rows].join('\n');
@@ -747,6 +945,7 @@ export class AllExpensesComponent implements OnInit {
     const a = document.createElement('a');
     a.href = url; a.download = 'expenses.csv'; a.click();
     URL.revokeObjectURL(url);
+    this.showToast('CSV exported successfully!', 'success');
   }
 
   private async generateChartImage(chartType: 'category' | 'mode' | 'bank' | 'line' | 'bar'): Promise<string> {
@@ -905,7 +1104,7 @@ export class AllExpensesComponent implements OnInit {
 
   async exportPDF(transactions: Transaction[]) {
     if (!transactions.length) {
-      alert('No transactions to export');
+      this.showToast('No transactions to export', 'warning');
       return;
     }
 
@@ -1208,16 +1407,16 @@ export class AllExpensesComponent implements OnInit {
       // Save PDF
       const fileName = `expenses_${new Date().toISOString().split('T')[0]}.pdf`;
       doc.save(fileName);
-      alert('✓ PDF exported successfully with charts!');
+      this.showToast('PDF exported successfully!', 'success');
     } catch (error) {
       console.error('PDF Export Error:', error);
-      alert('Error exporting PDF. Please try again or contact support.');
+      this.showToast('Error exporting PDF. Please try again.', 'danger');
     }
   }
 
   exportXLSX(transactions: Transaction[]) {
     if (!transactions.length) {
-      alert('No transactions to export');
+      this.showToast('No transactions to export', 'warning');
       return;
     }
 
@@ -1281,11 +1480,16 @@ export class AllExpensesComponent implements OnInit {
 
       // Write file
       XLSX.writeFile(workbook, fileName);
-      alert('✓ XLSX exported successfully!');
+      this.showToast('XLSX exported successfully!', 'success');
     } catch (error) {
       console.error('XLSX Export Error:', error);
-      alert('Error exporting XLSX. Please try again or contact support.');
+      this.showToast('Error exporting XLSX. Please try again.', 'danger');
     }
+  }
+
+  showToast(message: string, type: 'success' | 'warning' | 'danger' = 'success') {
+    this.toast = { show: true, message, type };
+    setTimeout(() => this.toast.show = false, 3500);
   }
 
   private initForm() {
@@ -1295,7 +1499,7 @@ export class AllExpensesComponent implements OnInit {
       subCategory: ['', Validators.required],
       date: [new Date().toISOString().split('T')[0], Validators.required],
       mode: ['UPI', Validators.required],
-      bank: ['SBI']
+      bank: ['']
     });
   }
 
@@ -1319,6 +1523,11 @@ export class AllExpensesComponent implements OnInit {
   }
 
   onSubmit() {
+    if (this.currentBanks.length === 0) {
+      alert('Please add at least one bank account first.');
+      return;
+    }
+
     if (this.expenseForm.valid) {
       const formValue = this.expenseForm.value;
       const { bank, ...transactionData } = formValue;

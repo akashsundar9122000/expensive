@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { Notification } from './models';
+import { AuthService } from './auth.service';
 
 @Injectable({
     providedIn: 'root'
@@ -11,9 +12,16 @@ export class NotificationService {
 
     private notificationCountSubject = new BehaviorSubject<number>(0);
     public notificationCount$ = this.notificationCountSubject.asObservable();
+    private storageKey = 'app_notifications_guest';
 
-    constructor() {
-        this.loadNotifications();
+    constructor(private authService: AuthService) {
+        this.authService.getCurrentUser().subscribe(user => {
+            const email = (user?.email || '').trim().toLowerCase();
+            this.storageKey = email
+                ? `app_notifications_${encodeURIComponent(email)}`
+                : 'app_notifications_guest';
+            this.loadNotifications();
+        });
     }
 
     /**
@@ -138,7 +146,7 @@ export class NotificationService {
      */
     private saveNotifications(notifications: Notification[]): void {
         try {
-            localStorage.setItem('app_notifications', JSON.stringify(notifications));
+            localStorage.setItem(this.storageKey, JSON.stringify(notifications));
         } catch (error) {
             console.error('Failed to save notifications:', error);
         }
@@ -149,7 +157,7 @@ export class NotificationService {
      */
     private loadNotifications(): void {
         try {
-            const stored = localStorage.getItem('app_notifications');
+            const stored = localStorage.getItem(this.storageKey);
             if (stored) {
                 const notifications = JSON.parse(stored).map((n: any) => ({
                     ...n,
@@ -157,9 +165,14 @@ export class NotificationService {
                 }));
                 this.notificationsSubject.next(notifications);
                 this.updateNotificationCount();
+            } else {
+                this.notificationsSubject.next([]);
+                this.updateNotificationCount();
             }
         } catch (error) {
             console.error('Failed to load notifications:', error);
+            this.notificationsSubject.next([]);
+            this.updateNotificationCount();
         }
     }
 }

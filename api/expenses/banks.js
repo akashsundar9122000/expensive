@@ -51,6 +51,13 @@ module.exports = async (req, res) => {
         if (req.method === 'DELETE') {
             const id = req.query.id;
             if (!id) return res.status(400).json({ error: 'Bank id required' });
+
+            const countResult = await query('SELECT COUNT(*)::int AS count FROM bank_accounts WHERE user_id = $1', [userId]);
+            const bankCount = countResult.rows[0]?.count || 0;
+            if (bankCount <= 1) {
+                return res.status(400).json({ error: 'At least one bank account is required' });
+            }
+
             await query('DELETE FROM bank_accounts WHERE id = $1 AND user_id = $2', [id, userId]);
             return res.status(200).json({ success: true });
         }

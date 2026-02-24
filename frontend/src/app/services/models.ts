@@ -20,6 +20,7 @@ export interface Transaction {
     date: string;
     mode: 'Bank' | 'UPI' | 'Card';
     type?: 'Income' | 'Expense';
+    bankName?: string;
 }
 
 export interface Subscription {

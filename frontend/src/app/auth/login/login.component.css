@@ -305,3 +305,54 @@
         padding: 0 40px;
     }
 }
+
+@media (max-width: 600px) {
+    .auth-card {
+        padding: 24px 16px;
+        justify-content: flex-start;
+    }
+
+    .auth-header {
+        margin-bottom: 24px;
+    }
+
+    .auth-header .logo-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 22px;
+        margin-bottom: 16px;
+    }
+
+    .auth-header h2 {
+        font-size: 26px;
+    }
+
+    .auth-header p {
+        font-size: 14px;
+    }
+
+    .auth-form {
+        gap: 16px;
+    }
+
+    .input-wrapper input {
+        font-size: 16px;
+        padding: 13px 44px 13px 44px;
+    }
+
+    .form-options {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .auth-btn,
+    .google-btn {
+        font-size: 15px;
+        padding: 13px;
+    }
+
+    .auth-footer {
+        margin-top: 20px;
+    }
+}

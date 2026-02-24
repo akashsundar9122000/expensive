@@ -5,6 +5,10 @@
     "installCommand": "npm install && cd frontend && npm install",
     "routes": [
         {
+            "src": "/api/health",
+            "dest": "/api/health.js"
+        },
+        {
             "src": "/api/auth/(.*)",
             "dest": "/api/auth.js"
         },

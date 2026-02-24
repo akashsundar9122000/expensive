@@ -27,6 +27,20 @@ module.exports = async (req, res) => {
         }
 
         if (req.method === 'POST') {
+            const updateId = req.query.id || req.body?.id;
+            if (updateId) {
+                const { name, amount, icon, color, date } = req.body;
+                const subId = parseInt(updateId, 10);
+                if (isNaN(subId)) return res.status(400).json({ error: 'Invalid ID format' });
+
+                const updateResult = await query(
+                    'UPDATE subscriptions SET name = $1, amount = $2, icon = $3, color = $4, date = $5 WHERE id = $6 AND user_id = $7 RETURNING id, name, amount, icon, color, date',
+                    [name, amount, icon, color, date, subId, userId]
+                );
+                if (updateResult.rows.length === 0) return res.status(404).json({ error: 'Subscription not found' });
+                return res.status(200).json(updateResult.rows[0]);
+            }
+
             const { name, amount, icon, color, date } = req.body;
             const result = await query(
                 'INSERT INTO subscriptions (user_id, name, amount, icon, color, date) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, amount, icon, color, date',

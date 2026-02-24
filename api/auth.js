@@ -1,4 +1,5 @@
 const bcrypt = require('bcryptjs');
+const { randomUUID } = require('crypto');
 const { query } = require('./_lib/db');
 const { generateToken, getEmailFromRequest, cors } = require('./_lib/auth');
 
@@ -44,9 +45,10 @@ module.exports = async (req, res) => {
             if (existing.rows.length > 0) return res.status(400).json({ error: 'User already exists' });
 
             const hashedPassword = await bcrypt.hash(password, 10);
+            const userId = randomUUID();
             const userResult = await query(
-                'INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING id, name, email',
-                [name, email, hashedPassword]
+                'INSERT INTO users (id, name, email, password) VALUES ($1, $2, $3, $4) RETURNING id, name, email',
+                [userId, name, email, hashedPassword]
             );
             const user = userResult.rows[0];
 

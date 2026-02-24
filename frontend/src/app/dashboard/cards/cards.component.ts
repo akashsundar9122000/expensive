@@ -23,7 +23,7 @@ import { FormsModule } from '@angular/forms';
         <header class="top-header">
           <div class="header-left">
             <button class="menu-trigger" (click)="isMobileMenuOpen = !isMobileMenuOpen">
-                <i class="ph ph-list"></i>
+              <i class="ph ph-list"></i>
             </button>
             <h1>My Cards & Banks</h1>
             <p>Manage your linked bank accounts and cards</p>
@@ -32,9 +32,10 @@ import { FormsModule } from '@angular/forms';
             <button class="primary-btn" (click)="showAddBankModal = true">
               <i class="ph ph-plus"></i> <span class="btn-label">Add Bank Account</span>
             </button>
-            <div class="fallback-header-avatar">
+            <div class="fallback-header-avatar" *ngIf="!data.user?.avatar">
               <i class="ph ph-user"></i>
             </div>
+            <img *ngIf="data.user?.avatar" [src]="data.user?.avatar" alt="Avatar" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border-light);">
           </div>
         </header>
 
@@ -196,7 +197,7 @@ import { FormsModule } from '@angular/forms';
         font-size: 24px;
         cursor: pointer;
         padding: 4px;
-        display: flex;
+      display: none;
         align-items: center;
         justify-content: center;
         flex-shrink: 0;
@@ -212,6 +213,10 @@ import { FormsModule } from '@angular/forms';
     }
 
     @media (max-width: 768px) {
+      .menu-trigger {
+        display: flex;
+      }
+
         .premium-card {
             padding: 24px;
             height: 220px;

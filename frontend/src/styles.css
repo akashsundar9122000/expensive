@@ -445,7 +445,7 @@ input::placeholder {
   top: 0;
   z-index: 80;
   transition: background var(--transition-normal);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .header-left {
@@ -505,6 +505,16 @@ input::placeholder {
     padding: 0 16px;
   }
 
+  .top-header .header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .top-header .header-left h1 {
+    margin-bottom: 0;
+  }
+
   .header-right {
     gap: 8px;
   }
@@ -512,11 +522,37 @@ input::placeholder {
   .dashboard-body {
     padding: 20px 16px;
   }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  .modal-overlay {
+    padding: 12px;
+    align-items: flex-end;
+  }
+
+  .modal-card {
+    width: 100%;
+    max-height: 92dvh;
+    border-radius: 20px 20px 0 0;
+    padding: 24px;
+  }
 }
 
 @media (max-width: 480px) {
   .header-right {
     gap: 8px;
+  }
+
+  .top-header {
+    padding: 0 12px;
+  }
+
+  .dashboard-body {
+    padding: 16px 12px;
   }
 
   .primary-btn .btn-label {

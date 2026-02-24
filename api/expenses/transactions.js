@@ -15,7 +15,11 @@ module.exports = async (req, res) => {
     try {
         if (req.method === 'GET') {
             const result = await query(
-                'SELECT id, amount, category, sub_category as "subCategory", date, mode FROM transactions WHERE user_id = $1 ORDER BY date DESC',
+                `SELECT t.id, t.amount, t.category, t.sub_category as "subCategory", t.date, t.mode, b.name as "bankName"
+                 FROM transactions t
+                 LEFT JOIN bank_accounts b ON b.id = t.bank_account_id
+                 WHERE t.user_id = $1
+                 ORDER BY t.date DESC`,
                 [userId]
             );
             return res.status(200).json(result.rows);
@@ -23,7 +27,8 @@ module.exports = async (req, res) => {
 
         if (req.method === 'POST') {
             const { amount, category, subCategory, date, mode } = req.body;
-            const bankName = req.query.bankName || 'SBI';
+            const bankName = req.query.bankName;
+            if (!bankName) return res.status(400).json({ error: 'bankName is required' });
 
             // Get or create bank account
             let bankResult = await query('SELECT id, balance FROM bank_accounts WHERE user_id = $1 AND name = $2', [userId, bankName]);
@@ -39,14 +44,16 @@ module.exports = async (req, res) => {
 
             // Insert transaction
             const txResult = await query(
-                'INSERT INTO transactions (user_id, amount, category, sub_category, date, mode, bank_account_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, amount, category, sub_category as "subCategory", date, mode',
+                `INSERT INTO transactions (user_id, amount, category, sub_category, date, mode, bank_account_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)
+                 RETURNING id, amount, category, sub_category as "subCategory", date, mode`,
                 [userId, amount, category, subCategory, date, mode, bankId]
             );
 
             // Update balance
             await query('UPDATE bank_accounts SET balance = $1 WHERE id = $2', [balance - parseFloat(amount), bankId]);
 
-            return res.status(200).json(txResult.rows[0]);
+            return res.status(200).json({ ...txResult.rows[0], bankName });
         }
 
         if (req.method === 'DELETE') {

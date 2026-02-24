@@ -27,9 +27,10 @@ import { FormsModule } from '@angular/forms';
             <p>Save for what matters most</p>
           </div>
           <div class="header-right">
-            <div class="fallback-header-avatar">
+            <div class="fallback-header-avatar" *ngIf="!data.user?.avatar">
               <i class="ph ph-user"></i>
             </div>
+            <img *ngIf="data.user?.avatar" [src]="data.user?.avatar" alt="Avatar" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border-light);">
           </div>
         </header>
 

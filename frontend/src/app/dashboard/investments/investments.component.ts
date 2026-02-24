@@ -42,9 +42,10 @@ const INVESTMENT_TYPES = [
             <button class="primary-btn add-btn" (click)="showModal = true">
               <i class="ph ph-plus"></i> <span class="btn-label">Add Investment</span>
             </button>
-            <div class="fallback-header-avatar">
+            <div class="fallback-header-avatar" *ngIf="!data.user?.avatar">
               <i class="ph ph-user"></i>
             </div>
+            <img *ngIf="data.user?.avatar" [src]="data.user?.avatar" alt="Avatar" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid var(--border-light);">
           </div>
         </header>
 

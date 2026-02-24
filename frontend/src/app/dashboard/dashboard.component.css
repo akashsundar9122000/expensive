@@ -1562,8 +1562,18 @@ form textarea:focus {
     }
 
     .data-table td:last-child {
-        align-self: flex-end;
-        margin-top: -30px;
+        align-self: flex-start;
+        margin-top: 0;
+    }
+
+    .chart-header {
+        gap: 8px;
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .view-all {
+        font-size: 12px;
     }
 }
 

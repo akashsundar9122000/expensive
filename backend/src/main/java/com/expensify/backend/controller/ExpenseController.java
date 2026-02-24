@@ -74,10 +74,14 @@ public class ExpenseController {
     }
 
     @DeleteMapping("/banks")
-    public ResponseEntity<Void> deleteBank(@RequestParam Long id, Principal principal) {
+    public ResponseEntity<?> deleteBank(@RequestParam Long id, Principal principal) {
         User user = userRepository.findByEmail(principal.getName()).orElseThrow();
-        expenseService.deleteBank(user, id);
-        return ResponseEntity.ok().build();
+        try {
+            expenseService.deleteBank(user, id);
+            return ResponseEntity.ok().build();
+        } catch (IllegalStateException ex) {
+            return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+        }
     }
 
     @GetMapping("/stats")
@@ -108,6 +112,33 @@ public class ExpenseController {
             @RequestBody com.expensify.backend.model.Subscription sub, Principal principal) {
         User user = userRepository.findByEmail(principal.getName()).orElseThrow();
         return ResponseEntity.ok(expenseService.addSubscription(user, sub));
+    }
+
+    @PutMapping("/subscriptions/{id}")
+    public ResponseEntity<com.expensify.backend.model.Subscription> updateSubscription(
+            @PathVariable Long id,
+            @RequestBody com.expensify.backend.model.Subscription sub,
+            Principal principal) {
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+        return ResponseEntity.ok(expenseService.updateSubscription(user, id, sub));
+    }
+
+    @PutMapping("/subscriptions")
+    public ResponseEntity<com.expensify.backend.model.Subscription> updateSubscriptionByQuery(
+            @RequestParam Long id,
+            @RequestBody com.expensify.backend.model.Subscription sub,
+            Principal principal) {
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+        return ResponseEntity.ok(expenseService.updateSubscription(user, id, sub));
+    }
+
+    @PostMapping("/subscriptions/update")
+    public ResponseEntity<com.expensify.backend.model.Subscription> updateSubscriptionByPost(
+            @RequestParam Long id,
+            @RequestBody com.expensify.backend.model.Subscription sub,
+            Principal principal) {
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+        return ResponseEntity.ok(expenseService.updateSubscription(user, id, sub));
     }
 
     @DeleteMapping("/subscriptions/{id}")

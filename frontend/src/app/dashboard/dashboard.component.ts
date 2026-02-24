@@ -44,7 +44,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     showAddBankModal = false;
     showAssets = false;
     showNotificationPanel = false;
-    selectedBank = 'SBI';
+    selectedBank = '';
     chartPeriod: 'weekly' | 'monthly' | 'yearly' = 'monthly';
     chartBars: { label: string; height: number; active: boolean; amount: number }[] = [];
     toast: { show: boolean; message: string; type: 'success' | 'warning' | 'danger' } = { show: false, message: '', type: 'success' };
@@ -108,7 +108,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
             });
 
         this.banks$.pipe(takeUntil(this.destroy$)).subscribe(banks => {
-            if (banks.length > 0 && !banks.some(b => b.name === this.selectedBank)) {
+            if (banks.length === 0) {
+                this.selectedBank = '';
+                this.expenseForm.patchValue({ bank: '' });
+                this.cdr.markForCheck();
+                return;
+            }
+
+            if (!banks.some(b => b.name === this.selectedBank)) {
                 this.selectedBank = banks[0].name;
                 this.expenseForm.patchValue({ bank: this.selectedBank });
                 this.cdr.markForCheck();
@@ -421,7 +428,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
             subCategory: ['', Validators.required],
             date: [new Date().toISOString().split('T')[0], Validators.required],
             mode: ['UPI', Validators.required],
-            bank: ['SBI']
+            bank: ['']
         });
     }
 

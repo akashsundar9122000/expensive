@@ -76,6 +76,11 @@ public class ExpenseService {
 
     @Transactional
     public void deleteBank(User user, Long bankId) {
+        List<BankAccount> banks = bankAccountRepository.findByUser(user);
+        if (banks.size() <= 1) {
+            throw new IllegalStateException("At least one bank account is required");
+        }
+
         BankAccount bank = bankAccountRepository.findByIdAndUser(bankId, user)
                 .orElseThrow();
 
@@ -100,6 +105,20 @@ public class ExpenseService {
     public Subscription addSubscription(User user, Subscription sub) {
         sub.setUser(user);
         return subscriptionRepository.save(sub);
+    }
+
+    @Transactional
+    public Subscription updateSubscription(User user, Long id, Subscription updates) {
+        Subscription existing = subscriptionRepository.findByIdAndUser(id, user)
+                .orElseThrow();
+
+        existing.setName(updates.getName());
+        existing.setAmount(updates.getAmount());
+        existing.setIcon(updates.getIcon());
+        existing.setColor(updates.getColor());
+        existing.setDate(updates.getDate());
+
+        return subscriptionRepository.save(existing);
     }
 
     @Transactional

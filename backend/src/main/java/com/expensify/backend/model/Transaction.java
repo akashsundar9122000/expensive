@@ -2,6 +2,7 @@ package com.expensify.backend.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -29,6 +30,7 @@ public class Transaction {
 
     @ManyToOne
     @JoinColumn(name = "bank_account_id")
+    @JsonIgnore
     private BankAccount bankAccount;
 
     @Column(nullable = false)
@@ -44,4 +46,10 @@ public class Transaction {
 
     @Column(nullable = false)
     private String mode;
+
+    @Transient
+    @JsonProperty("bankName")
+    public String getBankName() {
+        return bankAccount != null ? bankAccount.getName() : null;
+    }
 }
