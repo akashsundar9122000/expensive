@@ -167,6 +167,19 @@ import { FormsModule } from '@angular/forms';
                 <span class="currency-display">₹ INR</span>
               </div>
 
+              <div class="setting-item danger-setting">
+                <div class="setting-info">
+                  <i class="ph ph-warning-circle"></i>
+                  <div>
+                    <h4>Delete Account</h4>
+                    <p>Permanently remove your account and all your data</p>
+                  </div>
+                </div>
+                <button class="danger-outline-btn" (click)="openDeleteAccountModal()">
+                  <i class="ph ph-trash"></i> Delete
+                </button>
+              </div>
+
               <button class="danger-btn" style="width: 100%; margin-top: 32px;" (click)="logout()">
                 <i class="ph ph-sign-out"></i> Sign Out
               </button>
@@ -191,6 +204,38 @@ import { FormsModule } from '@angular/forms';
           <button class="cancel-action-btn" (click)="cancelDelete()">Cancel</button>
           <button class="delete-action-btn" (click)="confirmDelete()">
             <i class="ph ph-trash"></i> Delete
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="confirm-overlay" *ngIf="showDeleteAccountConfirm" (click)="cancelDeleteAccount()">
+      <div class="confirm-card" (click)="$event.stopPropagation()">
+        <div class="confirm-icon-wrap">
+          <i class="ph ph-user-minus"></i>
+        </div>
+        <h3 class="confirm-title">Delete Your Account?</h3>
+        <p class="confirm-msg">
+          Enter your current password to confirm account deletion. This action cannot be undone.
+        </p>
+        <div class="confirm-form">
+          <div class="confirm-password-wrap">
+            <input
+              [type]="showDeleteAccountPassword ? 'text' : 'password'"
+              class="confirm-password-input"
+              [(ngModel)]="deleteAccountPassword"
+              placeholder="Current password"
+              (keyup.enter)="confirmDeleteAccount()">
+            <button type="button" class="confirm-password-toggle" (click)="showDeleteAccountPassword = !showDeleteAccountPassword">
+              <i class="ph" [ngClass]="showDeleteAccountPassword ? 'ph-eye-slash' : 'ph-eye'"></i>
+            </button>
+          </div>
+          <p class="confirm-error" *ngIf="deleteAccountError">{{ deleteAccountError }}</p>
+        </div>
+        <div class="confirm-actions">
+          <button class="cancel-action-btn" (click)="cancelDeleteAccount()">Cancel</button>
+          <button class="delete-action-btn" (click)="confirmDeleteAccount()" [disabled]="isDeletingAccount">
+            <i class="ph ph-trash"></i> {{ isDeletingAccount ? 'Deleting...' : 'Delete Account' }}
           </button>
         </div>
       </div>
@@ -272,6 +317,21 @@ import { FormsModule } from '@angular/forms';
     .setting-info h4 { margin-bottom: 2px; font-size: 14px; }
     .setting-info p { font-size: 12px; color: var(--text-muted); }
     .currency-display { font-weight: 700; color: var(--text-dark); font-size: 14px; }
+    .danger-setting .setting-info > i { color: var(--danger-red); }
+
+    .danger-outline-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1.5px solid var(--danger-red);
+      color: var(--danger-red);
+      background: transparent;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .danger-outline-btn:hover { background: var(--bg-hover); }
 
     .danger-btn { display: flex; align-items: center; justify-content: center; gap: 8px; }
 
@@ -327,6 +387,55 @@ import { FormsModule } from '@angular/forms';
     }
     .confirm-msg strong { color: var(--text-dark); }
 
+    .confirm-form {
+      margin-bottom: 18px;
+      text-align: left;
+    }
+
+    .confirm-password-input {
+      width: 100%;
+      padding: 10px 44px 10px 12px;
+      border-radius: 10px;
+      border: 1.5px solid var(--border-light);
+      background: var(--bg-main);
+      color: var(--text-dark);
+      outline: none;
+      font-size: 14px;
+    }
+    .confirm-password-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .confirm-password-toggle {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      cursor: pointer;
+    }
+    .confirm-password-toggle:hover { color: var(--primary-blue); }
+    .confirm-password-input:focus {
+      border-color: var(--primary-blue);
+      box-shadow: 0 0 0 2px var(--primary-blue-light);
+    }
+
+    .confirm-error {
+      margin: 8px 2px 0;
+      font-size: 12px;
+      color: var(--danger-red);
+    }
+
     .confirm-actions {
       display: flex; gap: 12px;
     }
@@ -378,6 +487,11 @@ export class SettingsComponent implements OnInit {
   showDeleteConfirm = false;
   bankToDelete: Bank | null = null;
   bankCount = 0;
+  showDeleteAccountConfirm = false;
+  deleteAccountPassword = '';
+  deleteAccountError = '';
+  isDeletingAccount = false;
+  showDeleteAccountPassword = false;
 
   avatars = [
     'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
@@ -486,6 +600,41 @@ export class SettingsComponent implements OnInit {
   cancelDelete() {
     this.showDeleteConfirm = false;
     this.bankToDelete = null;
+  }
+
+  openDeleteAccountModal() {
+    this.deleteAccountPassword = '';
+    this.deleteAccountError = '';
+    this.showDeleteAccountPassword = false;
+    this.showDeleteAccountConfirm = true;
+  }
+
+  cancelDeleteAccount() {
+    this.showDeleteAccountConfirm = false;
+    this.deleteAccountPassword = '';
+    this.deleteAccountError = '';
+    this.isDeletingAccount = false;
+    this.showDeleteAccountPassword = false;
+  }
+
+  confirmDeleteAccount() {
+    const password = this.deleteAccountPassword;
+    if (!password) {
+      this.deleteAccountError = 'Current password is required.';
+      return;
+    }
+
+    this.isDeletingAccount = true;
+    this.deleteAccountError = '';
+    this.authService.deleteAccount(password).subscribe({
+      next: () => {
+        this.cancelDeleteAccount();
+      },
+      error: (err) => {
+        this.isDeletingAccount = false;
+        this.deleteAccountError = err?.error?.message || 'Incorrect current password.';
+      }
+    });
   }
 
   logout() {

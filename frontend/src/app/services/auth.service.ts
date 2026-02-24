@@ -111,6 +111,17 @@ export class AuthService {
         }
     }
 
+    deleteAccount(currentPassword: string): Observable<any> {
+        return this.http.post<any>(`${this.apiUrl}/account/delete`, {
+            password: currentPassword
+        }).pipe(
+            tap(() => {
+                localStorage.removeItem(this.rememberedLoginKey);
+                this.logout();
+            })
+        );
+    }
+
     logout() {
         localStorage.removeItem('token');
         localStorage.removeItem('currentUser');

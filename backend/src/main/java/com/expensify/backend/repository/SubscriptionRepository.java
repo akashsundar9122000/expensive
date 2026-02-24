@@ -9,4 +9,5 @@ import java.util.List;
 public interface SubscriptionRepository extends JpaRepository<Subscription, Long> {
     List<Subscription> findByUser(User user);
     Optional<Subscription> findByIdAndUser(Long id, User user);
+    void deleteByUser(User user);
 }

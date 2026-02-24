@@ -9,4 +9,5 @@ import java.util.List;
 public interface TransactionRepository extends JpaRepository<Transaction, Long> {
     List<Transaction> findByUserOrderByDateDesc(User user);
     List<Transaction> findByUserAndBankAccount(User user, BankAccount bankAccount);
+    void deleteByUser(User user);
 }

@@ -15,6 +15,7 @@ export class SignupComponent {
     name = '';
     email = '';
     password = '';
+    showPassword = false;
     errorMessage = '';
 
     constructor(private authService: AuthService, private router: Router) { }

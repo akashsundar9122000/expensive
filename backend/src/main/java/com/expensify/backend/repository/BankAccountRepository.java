@@ -9,4 +9,5 @@ import java.util.Optional;
 public interface BankAccountRepository extends JpaRepository<BankAccount, Long> {
     List<BankAccount> findByUser(User user);
     Optional<BankAccount> findByIdAndUser(Long id, User user);
+    void deleteByUser(User user);
 }

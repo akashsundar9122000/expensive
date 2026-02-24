@@ -7,4 +7,5 @@ import java.util.List;
 
 public interface InvestmentRepository extends JpaRepository<Investment, Long> {
     List<Investment> findByUser(User user);
+    void deleteByUser(User user);
 }

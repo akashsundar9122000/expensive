@@ -9,6 +9,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.expensify.backend.model.User;
 import com.expensify.backend.model.UserPreference;
+import com.expensify.backend.repository.BankAccountRepository;
+import com.expensify.backend.repository.BudgetRepository;
+import com.expensify.backend.repository.InvestmentRepository;
+import com.expensify.backend.repository.SubscriptionRepository;
+import com.expensify.backend.repository.TransactionRepository;
 import com.expensify.backend.repository.UserPreferenceRepository;
 import com.expensify.backend.repository.UserRepository;
 import com.expensify.backend.security.JwtService;
@@ -18,6 +23,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -36,6 +42,11 @@ import java.util.UUID;
 public class AuthService {
         private final UserRepository userRepository;
         private final UserPreferenceRepository userPreferenceRepository;
+        private final TransactionRepository transactionRepository;
+        private final BankAccountRepository bankAccountRepository;
+        private final SubscriptionRepository subscriptionRepository;
+        private final InvestmentRepository investmentRepository;
+        private final BudgetRepository budgetRepository;
         private final PasswordEncoder passwordEncoder;
         private final JwtService jwtService;
         private final AuthenticationManager authenticationManager;
@@ -229,5 +240,39 @@ public class AuthService {
                 if (avatarUrl != null)
                         user.setAvatarUrl(avatarUrl);
                 userRepository.save(user);
+        }
+
+        @Transactional
+        public void deleteAccount(String email, String currentPassword) {
+                if (currentPassword == null || currentPassword.isBlank()) {
+                        throw new IllegalArgumentException("Current password is required");
+                }
+
+                var user = userRepository.findByEmailIgnoreCase(email)
+                                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+                if (!matchesCurrentPassword(currentPassword, user.getPassword())) {
+                        throw new IllegalArgumentException("Incorrect current password");
+                }
+
+                transactionRepository.deleteByUser(user);
+                bankAccountRepository.deleteByUser(user);
+                subscriptionRepository.deleteByUser(user);
+                investmentRepository.deleteByUser(user);
+                budgetRepository.deleteByUser(user);
+                userPreferenceRepository.deleteById(user.getId());
+                userRepository.delete(user);
+        }
+
+        private boolean matchesCurrentPassword(String rawPassword, String storedPassword) {
+                if (storedPassword == null) {
+                        return false;
+                }
+
+                if (isBcryptHash(storedPassword)) {
+                        return passwordEncoder.matches(rawPassword, storedPassword);
+                }
+
+                return storedPassword.equals(rawPassword);
         }
 }

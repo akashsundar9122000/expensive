@@ -30,8 +30,11 @@
                 <label for="password">Password</label>
                 <div class="input-wrapper">
                     <i class="ph ph-lock"></i>
-                    <input type="password" id="password" name="password" [(ngModel)]="password" placeholder="••••••••"
+                    <input [type]="showPassword ? 'text' : 'password'" id="password" name="password" [(ngModel)]="password" placeholder="••••••••"
                         required>
+                    <button type="button" class="password-toggle" (click)="showPassword = !showPassword">
+                        <i class="ph" [ngClass]="showPassword ? 'ph-eye-slash' : 'ph-eye'"></i>
+                    </button>
                 </div>
             </div>
 
