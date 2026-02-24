@@ -21,13 +21,13 @@ module.exports = async (req, res) => {
     const email = getEmailFromRequest(req);
     if (!email) return res.status(401).json({ error: 'Unauthorized' });
 
-    const userResult = await query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [email]);
-    if (userResult.rows.length === 0) return res.status(401).json({ error: 'User not found' });
-    const userId = userResult.rows[0].id;
-
     try {
+        const userResult = await query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [email]);
+        if (userResult.rows.length === 0) return res.status(401).json({ error: 'User not found' });
+        const userId = userResult.rows[0].id;
+
         if (req.method === 'GET') {
-            const result = await query('SELECT id, name, balance FROM bank_accounts WHERE user_id = $1 ORDER BY created_at ASC', [userId]);
+            const result = await query('SELECT id, name, balance FROM bank_accounts WHERE user_id = $1 ORDER BY id ASC', [userId]);
             return res.status(200).json(result.rows);
         }
 

@@ -100,6 +100,32 @@ async function ensureSchema() {
                 UNIQUE(user_id, category)
             )
         `);
+
+        await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT`);
+        await p.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()`);
+
+        await p.query(`ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS goal_name TEXT DEFAULT 'Savings Goal'`);
+        await p.query(`ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS goal_required NUMERIC DEFAULT 100000`);
+        await p.query(`ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS goal_collected NUMERIC DEFAULT 0`);
+        await p.query(`ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS total_investment NUMERIC DEFAULT 0`);
+        await p.query(`ALTER TABLE user_preferences ADD COLUMN IF NOT EXISTS invest_amount NUMERIC DEFAULT 0`);
+
+        await p.query(`ALTER TABLE bank_accounts ADD COLUMN IF NOT EXISTS balance NUMERIC DEFAULT 0`);
+        await p.query(`ALTER TABLE bank_accounts ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()`);
+
+        await p.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS bank_account_id BIGINT REFERENCES bank_accounts(id) ON DELETE SET NULL`);
+        await p.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS sub_category TEXT`);
+        await p.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS mode TEXT DEFAULT 'Card'`);
+        await p.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()`);
+
+        await p.query(`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS icon TEXT`);
+        await p.query(`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS color TEXT`);
+        await p.query(`ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()`);
+
+        await p.query(`ALTER TABLE investments ADD COLUMN IF NOT EXISTS return_pct NUMERIC`);
+        await p.query(`ALTER TABLE investments ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()`);
+
+        await p.query(`ALTER TABLE budgets ADD COLUMN IF NOT EXISTS limit_amount NUMERIC DEFAULT 0`);
     })().catch((err) => {
         schemaReadyPromise = null;
         throw err;

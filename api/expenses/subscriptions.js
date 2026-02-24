@@ -13,11 +13,11 @@ module.exports = async (req, res) => {
         return res.status(401).json({ error: 'Unauthorized - Invalid or missing token' });
     }
 
-    const userResult = await query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [email]);
-    if (userResult.rows.length === 0) return res.status(401).json({ error: 'User not found' });
-    const userId = userResult.rows[0].id;
-
     try {
+        const userResult = await query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [email]);
+        if (userResult.rows.length === 0) return res.status(401).json({ error: 'User not found' });
+        const userId = userResult.rows[0].id;
+
         if (req.method === 'GET') {
             const result = await query(
                 'SELECT id, name, amount, icon, color, date FROM subscriptions WHERE user_id = $1',
