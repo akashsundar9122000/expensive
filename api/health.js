@@ -1,4 +1,4 @@
-const { getPool } = require('./_lib/db');
+const { query } = require('./_lib/db');
 
 const REQUIRED_TABLES = [
     'users',
@@ -30,11 +30,10 @@ module.exports = async (req, res) => {
     };
 
     try {
-        const pool = getPool();
-        await pool.query('SELECT 1');
+        await query('SELECT 1');
         payload.checks.db.ok = true;
 
-        const tableResult = await pool.query(
+        const tableResult = await query(
             `
             SELECT table_name
             FROM information_schema.tables
