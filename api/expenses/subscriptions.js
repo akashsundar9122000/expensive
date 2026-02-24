@@ -30,6 +30,13 @@ module.exports = async (req, res) => {
             return res.status(200).json(result.rows[0]);
         }
 
+        if (req.method === 'DELETE') {
+            const { id } = req.query;
+            if (!id) return res.status(400).json({ error: 'Missing ID' });
+            await query('DELETE FROM subscriptions WHERE id = $1 AND user_id = $2', [id, userId]);
+            return res.status(200).json({ message: 'Deleted' });
+        }
+
         return res.status(405).json({ error: 'Method not allowed' });
     } catch (err) {
         console.error('Subscriptions error:', err);
