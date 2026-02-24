@@ -82,7 +82,7 @@ export class ExpenseService {
 
     addBank(bankName: string) {
         this.http.post<any>(`${this.apiUrl}/banks?name=${bankName}`, {}).subscribe(() => {
-            this.refreshAllData();
+            setTimeout(() => this.refreshAllData(), 200);
         });
     }
 
@@ -97,7 +97,10 @@ export class ExpenseService {
 
     addSubscription(sub: Omit<Subscription, 'id'>): Observable<Subscription> {
         return this.http.post<Subscription>(`${this.apiUrl}/subscriptions`, sub).pipe(
-            tap(() => this.refreshAllData())
+            tap(() => {
+                // Ensure UI updates by triggering a fresh load
+                setTimeout(() => this.refreshAllData(), 100);
+            })
         );
     }
 

@@ -3,7 +3,8 @@ import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { ThemeService } from '../../services/theme.service';
-
+import { User } from '../../services/models';
+import { Observable } from 'rxjs';
 
 @Component({
     selector: 'app-sidebar',
@@ -49,6 +50,16 @@ import { ThemeService } from '../../services/theme.service';
         </div>
 
         <div class="sidebar-bottom">
+            <div class="user-profile-mini" *ngIf="user$ | async as user">
+                <div class="mini-avatar">
+                   <img *ngIf="user.avatar" [src]="user.avatar" alt="Avatar">
+                   <div *ngIf="!user.avatar" class="fallback-mini"><i class="ph ph-user"></i></div>
+                </div>
+                <div class="user-info">
+                   <span class="user-name">{{ user.name }}</span>
+                   <span class="user-email">{{ user.email }}</span>
+                </div>
+            </div>
             <ul class="nav-group-bottom">
                 <li><a class="logout-link" href="javascript:void(0)" (click)="logout()"><i class="ph ph-sign-out"></i> Logout</a></li>
             </ul>
@@ -158,6 +169,65 @@ import { ThemeService } from '../../services/theme.service';
         display: flex;
         flex-direction: column;
         gap: 16px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border-light);
+    }
+
+    .user-profile-mini {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px;
+        background: var(--bg-hover);
+        border-radius: 16px;
+    }
+
+    .mini-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--bg-chip);
+        flex-shrink: 0;
+    }
+
+    .mini-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .fallback-mini {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-muted);
+        font-size: 20px;
+    }
+
+    .user-info {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .user-name {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-dark);
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
+    }
+
+    .user-email {
+        font-size: 11px;
+        color: var(--text-muted);
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
     }
 
     .logout-link {
@@ -248,11 +318,14 @@ import { ThemeService } from '../../services/theme.service';
 export class SidebarComponent {
     @Input() isMobileOpen = false;
     @Output() closeMobile = new EventEmitter<void>();
+    user$: Observable<User | null>;
 
     constructor(
         private authService: AuthService,
         public themeService: ThemeService
-    ) { }
+    ) {
+        this.user$ = this.authService.getCurrentUser();
+    }
 
 
     toggleTheme() {

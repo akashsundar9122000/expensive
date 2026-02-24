@@ -109,6 +109,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     // ─── Dynamic Top Categories ───────────────────────────────────────────────
     getTopCategories(transactions: Transaction[]): { name: string; amount: number; percent: number; color: string }[] {
+        if (!transactions || transactions.length === 0) return [];
+
         const COLORS: Record<string, string> = {
             'Food & Grocery': '#fbbf24',
             'Food': '#fbbf24',
@@ -119,22 +121,31 @@ export class DashboardComponent implements OnInit, OnDestroy {
             'Education': '#10b981',
             'Other': '#64748b'
         };
+
         const totals: Record<string, number> = {};
         for (const t of transactions) {
+            // Only count child expenses (type null or 'Expense')
             if (t.type === 'Expense' || !t.type) {
-                totals[t.category] = (totals[t.category] || 0) + t.amount;
+                const amount = Number(t.amount) || 0;
+                totals[t.category] = (totals[t.category] || 0) + amount;
             }
         }
-        const total = Object.values(totals).reduce((a, b) => a + b, 0) || 1;
+
+        const totalSpent = Object.values(totals).reduce((a, b) => a + b, 0);
+        if (totalSpent <= 0) return [];
+
         return Object.entries(totals)
             .sort((a, b) => b[1] - a[1])
             .slice(0, 4)
-            .map(([name, amount]) => ({
-                name,
-                amount,
-                percent: Math.round((amount / total) * 100),
-                color: COLORS[name] || COLORS['Other']
-            }));
+            .map(([name, amount]) => {
+                const percent = Math.round((amount / totalSpent) * 100);
+                return {
+                    name,
+                    amount,
+                    percent: isNaN(percent) ? 0 : percent,
+                    color: COLORS[name] || COLORS['Other']
+                };
+            });
     }
 
     getTopCategoryPercent(transactions: Transaction[]): number {
@@ -158,7 +169,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
                 const spent = transactions
                     .filter(t => {
                         const d = t.date ? new Date(t.date) : null;
-                        return d && d.getMonth() === i && d.getFullYear() === now.getFullYear();
+                        return d && !isNaN(d.getTime()) && d.getMonth() === i && d.getFullYear() === now.getFullYear();
                     })
                     .reduce((s, t) => s + t.amount, 0);
                 return { label: m, height: spent, active: i === now.getMonth() };
@@ -170,7 +181,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
                 const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                 const dayName = dayNames[d.getDay()];
                 const spent = transactions
-                    .filter(t => t.date && new Date(t.date).toDateString() === d.toDateString())
+                    .filter(t => {
+                        const d = t.date ? new Date(t.date) : null;
+                        return d && !isNaN(d.getTime()) && d.toDateString() === d.toDateString();
+                    })
                     .reduce((s, t) => s + t.amount, 0);
                 return { label: dayName, height: spent, active: i === 6 };
             });
@@ -186,7 +200,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
             bars = Array.from({ length: 5 }, (_, i) => {
                 const yr = curYear - 4 + i;
                 const spent = transactions
-                    .filter(t => t.date && new Date(t.date).getFullYear() === yr)
+                    .filter(t => {
+                        const d = t.date ? new Date(t.date) : null;
+                        return d && !isNaN(d.getTime()) && d.getFullYear() === yr;
+                    })
                     .reduce((s, t) => s + t.amount, 0);
                 return { label: String(yr), height: spent, active: yr === curYear };
             });
@@ -286,15 +303,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     onSubmit() {
         if (this.expenseForm.valid) {
             const formValue = this.expenseForm.value;
-            const dateParts = formValue.date.split('-');
-            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-            const formattedDate = `${dateParts[2]} ${monthNames[parseInt(dateParts[1]) - 1]} ${dateParts[0].slice(-2)}`;
-
             const { bank, ...transactionData } = formValue;
-            this.expenseService.addTransaction(
-                { ...transactionData, date: formattedDate },
-                bank
-            );
+
+            // Send date as-is (ISO format YYYY-MM-DD from the input)
+            this.expenseService.addTransaction(transactionData, bank);
 
             this.toggleModal();
         }

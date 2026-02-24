@@ -180,6 +180,7 @@
     letter-spacing: -0.5px;
     line-height: 1.1;
     margin-bottom: 10px;
+    transition: color var(--transition-normal);
 }
 
 .stat-trend {
@@ -600,6 +601,7 @@
     font-size: 18px;
     font-weight: 700;
     color: var(--text-dark);
+    transition: color var(--transition-normal);
 }
 
 .category-legend {

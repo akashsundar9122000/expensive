@@ -4,12 +4,12 @@ import { ExpenseService } from '../../services/expense.service';
 import { Transaction, User } from '../../services/models';
 import { Observable, combineLatest, map, BehaviorSubject } from 'rxjs';
 import { SidebarComponent } from '../../shared/sidebar/sidebar.component';
-import { FormsModule } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 
 @Component({
   selector: 'app-all-expenses',
   standalone: true,
-  imports: [CommonModule, SidebarComponent, FormsModule],
+  imports: [CommonModule, SidebarComponent, FormsModule, ReactiveFormsModule],
   template: `
     <main class="dashboard-layout" *ngIf="{
       user: user$ | async,
@@ -36,9 +36,14 @@ import { FormsModule } from '@angular/forms';
                      (ngModelChange)="updateSearch($event)">
             </div>
 
-            <div class="fallback-header-avatar">
+            <button class="primary-btn add-btn" (click)="toggleModal()">
+               <i class="ph ph-plus"></i> <span class="btn-label">Add Expense</span>
+            </button>
+
+            <div class="fallback-header-avatar" *ngIf="!(data.user?.avatar)">
               <i class="ph ph-user"></i>
             </div>
+            <img *ngIf="data.user?.avatar" [src]="data.user?.avatar" class="header-avatar" alt="Avatar">
           </div>
         </header>
 
@@ -91,7 +96,7 @@ import { FormsModule } from '@angular/forms';
                       </span>
                     </td>
                     <td>{{ t.subCategory }}</td>
-                    <td class="hide-mobile">{{ t.date }}</td>
+                    <td class="hide-mobile">{{ t.date | date:'mediumDate' }}</td>
                     <td class="hide-mobile">
                       <span class="mode-chip" [ngClass]="{
                         'bank-mode': t.mode === 'Bank',
@@ -120,6 +125,67 @@ import { FormsModule } from '@angular/forms';
         </div>
       </div>
     </main>
+
+    <!-- Modal for Adding Expense -->
+    <div class="modal-overlay" *ngIf="showModal" (click)="toggleModal()">
+        <div class="modal-card" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3>Add New Expense</h3>
+                <button class="close-btn" (click)="toggleModal()"><i class="ph ph-x"></i></button>
+            </div>
+            <form [formGroup]="expenseForm" (ngSubmit)="onSubmit()">
+                <div class="form-group">
+                    <label>Amount (₹)</label>
+                    <input type="number" formControlName="amount" placeholder="0.00">
+                </div>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select formControlName="category">
+                            <option value="Food & Grocery">Food & Grocery</option>
+                            <option value="Education">Education</option>
+                            <option value="Transport">Transport</option>
+                            <option value="Shopping">Shopping</option>
+                            <option value="Bills">Bills</option>
+                            <option value="Entertainment">Entertainment</option>
+                            <option value="Home">Home</option>
+                            <option value="Healthcare">Healthcare</option>
+                            <option value="Lifestyle">Lifestyle</option>
+                            <option value="Finance">Finance</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Merchant / Note</label>
+                        <input type="text" formControlName="subCategory" placeholder="e.g. Starbucks">
+                    </div>
+                </div>
+                <div class="grid-2">
+                    <div class="form-group">
+                        <label>Date</label>
+                        <input type="date" formControlName="date">
+                    </div>
+                    <div class="form-group">
+                        <label>Payment Mode</label>
+                        <select formControlName="mode">
+                            <option value="UPI">UPI</option>
+                            <option value="Bank">Bank Transfer</option>
+                            <option value="Card">Credit Card</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Bank Account</label>
+                    <select formControlName="bank">
+                        <option *ngFor="let bank of (user$ | async)?.bankAccounts" [value]="bank">{{bank}}</option>
+                    </select>
+                </div>
+                <button type="submit" class="primary-btn" [disabled]="expenseForm.invalid" style="width: 100%; justify-content: center; margin-top: 10px;">
+                    <i class="ph ph-check"></i> Add Transaction
+                </button>
+            </form>
+        </div>
+    </div>
   `,
   styles: [`
     .amount-text { color: var(--text-dark); }
@@ -153,6 +219,64 @@ import { FormsModule } from '@angular/forms';
 
     .search-box input {
         padding-left: 40px !important;
+    }
+
+    .header-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid var(--primary-blue-light);
+    }
+
+    .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.5);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        animation: fadeIn 0.2s ease;
+    }
+
+    .modal-card {
+        background: var(--bg-card);
+        width: 450px;
+        max-width: 90%;
+        border-radius: 24px;
+        padding: 32px;
+        box-shadow: var(--shadow-xl);
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+    }
+
+    .close-btn {
+        background: var(--bg-hover);
+        border: none;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+    }
+
+    .btn-label {
+        font-weight: 600;
     }
 
     @media (max-width: 768px) {
@@ -225,6 +349,8 @@ export class AllExpensesComponent implements OnInit {
   searchQuery$ = new BehaviorSubject<string>('');
   categoryFilter$ = new BehaviorSubject<string>('All');
   isMobileMenuOpen = false;
+  showModal = false;
+  expenseForm!: FormGroup;
   filteredTransactions$!: Observable<Transaction[]>;
 
   private categoryColors: Record<string, { bg: string; color: string }> = {
@@ -235,7 +361,9 @@ export class AllExpensesComponent implements OnInit {
     'Bills': { bg: 'rgba(239, 68, 68, 0.1)', color: '#EF4444' },
   };
 
-  constructor(private expenseService: ExpenseService) { }
+  constructor(private expenseService: ExpenseService, private fb: FormBuilder) {
+    this.initForm();
+  }
 
   ngOnInit(): void {
     this.user$ = this.expenseService.getUser();
@@ -287,5 +415,44 @@ export class AllExpensesComponent implements OnInit {
     const a = document.createElement('a');
     a.href = url; a.download = 'expenses.csv'; a.click();
     URL.revokeObjectURL(url);
+  }
+
+  private initForm() {
+    this.expenseForm = this.fb.group({
+      amount: ['', [Validators.required, Validators.min(1)]],
+      category: ['Food & Grocery', Validators.required],
+      subCategory: ['', Validators.required],
+      date: [new Date().toISOString().split('T')[0], Validators.required],
+      mode: ['UPI', Validators.required],
+      bank: ['SBI']
+    });
+  }
+
+  toggleModal() {
+    this.showModal = !this.showModal;
+    if (!this.showModal) {
+      this.expenseForm.reset({
+        category: 'Food & Grocery',
+        date: new Date().toISOString().split('T')[0],
+        mode: 'UPI',
+        bank: 'SBI'
+      });
+    } else {
+      // Pre-select first bank if available
+      this.user$.subscribe(user => {
+        if (user && user.bankAccounts && user.bankAccounts.length > 0) {
+          this.expenseForm.patchValue({ bank: user.bankAccounts[0] });
+        }
+      });
+    }
+  }
+
+  onSubmit() {
+    if (this.expenseForm.valid) {
+      const formValue = this.expenseForm.value;
+      const { bank, ...transactionData } = formValue;
+      this.expenseService.addTransaction(transactionData, bank);
+      this.toggleModal();
+    }
   }
 }

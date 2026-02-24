@@ -284,7 +284,7 @@
                     <div class="subs-list">
                         <div class="sub-item" *ngFor="let s of (data.subscriptions || []).slice(0, 4)">
                             <div class="sub-icon" [style.backgroundColor]="s.color + '20'" [style.color]="s.color">
-                                <i [class]="'ph ' + s.icon"></i>
+                                <i [class]="'ph ' + (s.icon.startsWith('ph-') ? s.icon : 'ph-' + s.icon)"></i>
                             </div>
                             <div class="sub-details">
                                 <h4>{{ s.name }}</h4>
