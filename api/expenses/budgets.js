@@ -8,7 +8,7 @@ module.exports = async (req, res) => {
     const email = getEmailFromRequest(req);
     if (!email) return res.status(401).json({ error: 'Unauthorized' });
 
-    const userResult = await query('SELECT id FROM users WHERE email = $1', [email]);
+    const userResult = await query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [email]);
     if (userResult.rows.length === 0) return res.status(401).json({ error: 'User not found' });
     const userId = userResult.rows[0].id;
 

@@ -15,7 +15,7 @@ module.exports = async (req, res) => {
             const { email, password } = req.body;
             if (!email || !password) return res.status(400).json({ error: 'Missing fields' });
 
-            const result = await query('SELECT id, name, email, password, avatar_url FROM users WHERE email = $1', [email]);
+            const result = await query('SELECT id, name, email, password, avatar_url FROM users WHERE LOWER(email) = LOWER($1)', [email]);
             if (result.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
 
             const user = result.rows[0];
@@ -41,7 +41,7 @@ module.exports = async (req, res) => {
             const { name, email, password } = req.body;
             if (!name || !email || !password) return res.status(400).json({ error: 'Missing fields' });
 
-            const existing = await query('SELECT id FROM users WHERE email = $1', [email]);
+            const existing = await query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [email]);
             if (existing.rows.length > 0) return res.status(400).json({ error: 'User already exists' });
 
             const hashedPassword = await bcrypt.hash(password, 10);
@@ -158,7 +158,7 @@ module.exports = async (req, res) => {
                 if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
                 values.push(email);
-                await query(`UPDATE users SET ${updates.join(', ')} WHERE email = $${i}`, values);
+                await query(`UPDATE users SET ${updates.join(', ')} WHERE LOWER(email) = LOWER($${i})`, values);
                 return res.status(200).json({ message: 'Profile updated successfully' });
             }
         } catch (err) {
