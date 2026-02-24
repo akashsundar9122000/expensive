@@ -43,7 +43,7 @@ const POPULAR_SERVICES = [
               <span>Monthly Total</span>
               <strong>₹{{ getTotalMonthly(data.subscriptions!) | number:'1.0-0' }}</strong>
             </div>
-            <button class="primary-btn add-btn" (click)="toggleModal()">
+            <button class="primary-btn add-btn" (click)="openNewModal()">
               <i class="ph ph-plus"></i> <span class="btn-label">Add Subscription</span>
             </button>
             <div class="fallback-header-avatar">
@@ -59,13 +59,18 @@ const POPULAR_SERVICES = [
                 <div class="sub-icon" [style.background-color]="s.color + '15'" [style.color]="s.color">
                   <i class="ph-bold" [ngClass]="s.icon || 'ph-ticket'"></i>
                 </div>
-                <button class="delete-btn" (click)="deleteSub(s.id)">
-                  <i class="ph ph-trash"></i>
-                </button>
+                <div class="sub-actions">
+                  <button class="edit-btn" (click)="editSub(s)" title="Edit">
+                    <i class="ph ph-pencil"></i>
+                  </button>
+                  <button class="delete-btn" (click)="deleteSub(s.id)">
+                    <i class="ph ph-trash"></i>
+                  </button>
+                </div>
               </div>
               <h4>{{ s.name }}</h4>
               <div class="sub-amount">₹{{ s.amount | number:'1.0-0' }}<span>/mo</span></div>
-              <span class="sub-date">{{ s.date || 'Active' }}</span>
+              <span class="sub-date">Deducts on: <strong>{{ s.date || 'Not set' }}</strong></span>
             </div>
           </div>
 
@@ -79,15 +84,15 @@ const POPULAR_SERVICES = [
       </div>
     </main>
 
-    <!-- Add Subscription Modal -->
+    <!-- Add/Edit Subscription Modal -->
     <div class="modal-overlay" *ngIf="showModal" (click)="toggleModal()">
       <div class="modal-card" (click)="$event.stopPropagation()">
         <header class="modal-header">
-           <h3>Add Subscription</h3>
+           <h3>{{ isEditMode ? 'Edit Subscription' : 'Add Subscription' }}</h3>
            <button class="close-btn" (click)="toggleModal()"><i class="ph ph-x"></i></button>
         </header>
 
-        <div class="quick-add">
+        <div class="quick-add" *ngIf="!isEditMode">
           <p class="section-label">Quick Add Popular Services</p>
           <div class="quick-grid">
             <div class="quick-item"
@@ -102,7 +107,7 @@ const POPULAR_SERVICES = [
           </div>
         </div>
 
-        <hr style="border: none; border-top: 1px solid var(--border-light); margin: 20px 0;">
+        <hr *ngIf="!isEditMode" style="border: none; border-top: 1px solid var(--border-light); margin: 20px 0;">
         <p class="section-label">Subscription Details</p>
 
         <div class="form-group">
@@ -112,6 +117,11 @@ const POPULAR_SERVICES = [
         <div class="form-group">
           <label>Monthly Amount (₹) *</label>
           <input type="number" [(ngModel)]="newSub.amount" placeholder="Enter monthly amount" min="1">
+        </div>
+        <div class="form-group">
+          <label>Billing Date (Day of Month) *</label>
+          <input type="number" [(ngModel)]="newSub.date" placeholder="e.g. 1, 15, 30..." min="1" max="31">
+          <p class="hint">Day of month when amount will be deducted</p>
         </div>
         <div class="form-group">
           <label>Accent Color</label>
@@ -128,7 +138,7 @@ const POPULAR_SERVICES = [
         <div style="display:flex; gap: 12px; margin-top:8px;">
           <button class="outline-btn" style="flex: 1;" (click)="toggleModal()">Cancel</button>
           <button class="primary-btn" style="flex: 2; justify-content: center;" (click)="saveSub()">
-            Save Subscription
+            {{ isEditMode ? 'Update Subscription' : 'Save Subscription' }}
           </button>
         </div>
       </div>
@@ -157,6 +167,11 @@ const POPULAR_SERVICES = [
     .sub-amount span { font-size: 13px; font-weight: 500; color: var(--text-muted); margin-left: 2px; }
     .sub-date { font-size: 12px; color: var(--text-muted); }
 
+    .sub-actions { display: flex; gap: 8px; align-items: center; }
+    .edit-btn, .delete-btn { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; padding: 4px; border-radius: 6px; transition: all var(--transition-fast); }
+    .edit-btn:hover { background: var(--bg-hover); color: var(--primary-blue); }
+    .delete-btn:hover { background: var(--bg-hover); color: var(--danger-red); }
+
     .quick-add { margin-bottom: 8px; }
     .section-label { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
     .quick-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
@@ -175,6 +190,8 @@ const POPULAR_SERVICES = [
       font-size: 24px; cursor: pointer; padding: 4px;
       display: none; align-items: center; justify-content: center; flex-shrink: 0;
     }
+
+    .hint { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
 
     @media (max-width: 900px) {
       .menu-trigger { display: flex; }
@@ -195,9 +212,11 @@ export class SubscriptionsComponent implements OnInit {
   subscriptions$!: Observable<Subscription[]>;
   isMobileMenuOpen = false;
   showModal = false;
+  isEditMode = false;
+  editingSubId: number | null = null;
   saveError = '';
   popularServices = POPULAR_SERVICES;
-  newSub = { name: '', amount: 0 as number, icon: 'ph-ticket', color: '#3B82F6', date: 'Active' };
+  newSub = { name: '', amount: 0 as number, icon: 'ph-ticket', color: '#3B82F6', date: '' };
 
   constructor(private expenseService: ExpenseService) { }
 
@@ -213,6 +232,21 @@ export class SubscriptionsComponent implements OnInit {
   toggleModal() {
     this.showModal = !this.showModal;
     this.saveError = '';
+    if (!this.showModal) {
+      this.resetForm();
+    }
+  }
+
+  openNewModal() {
+    this.isEditMode = false;
+    this.editingSubId = null;
+    this.resetForm();
+    this.showModal = true;
+  }
+
+  resetForm() {
+    this.newSub = { name: '', amount: 0, icon: 'ph-ticket', color: '#3B82F6', date: '' };
+    this.saveError = '';
   }
 
   quickAdd(svc: { name: string; icon: string; color: string }) {
@@ -222,8 +256,24 @@ export class SubscriptionsComponent implements OnInit {
     this.saveError = '';
   }
 
+  editSub(sub: Subscription) {
+    this.isEditMode = true;
+    this.editingSubId = sub.id;
+    this.newSub = { 
+      name: sub.name, 
+      amount: sub.amount, 
+      icon: sub.icon || 'ph-ticket', 
+      color: sub.color, 
+      date: sub.date || '' 
+    };
+    this.saveError = '';
+    this.showModal = true;
+  }
+
   saveSub() {
     const amount = +this.newSub.amount;
+    const dateStr = String(this.newSub.date).trim();
+    
     if (!this.newSub.name.trim()) {
       this.saveError = 'Please enter a service name.';
       return;
@@ -232,17 +282,52 @@ export class SubscriptionsComponent implements OnInit {
       this.saveError = 'Please enter a valid monthly amount (greater than 0).';
       return;
     }
+    if (!dateStr) {
+      this.saveError = 'Please enter a billing date (day of month).';
+      return;
+    }
+    
+    const dateNum = parseInt(dateStr, 10);
+    if (isNaN(dateNum) || dateNum < 1 || dateNum > 31) {
+      this.saveError = 'Billing date must be between 1 and 31.';
+      return;
+    }
+    
     this.saveError = '';
-    this.expenseService.addSubscription({ ...this.newSub, amount }).subscribe({
-      next: () => {
-        this.toggleModal();
-        this.newSub = { name: '', amount: 0, icon: 'ph-ticket', color: '#3B82F6', date: 'Active' };
-      },
-      error: (err) => {
-        console.error('Subscription save error:', err);
-        this.saveError = err?.error?.message || 'Failed to save. Check your connection and try again.';
-      }
-    });
+    
+    const payload = {
+      name: this.newSub.name,
+      amount: amount,
+      date: dateStr,
+      icon: this.newSub.icon,
+      color: this.newSub.color
+    };
+    
+    if (this.isEditMode && this.editingSubId) {
+      this.expenseService.editSubscription(this.editingSubId, payload).subscribe({
+        next: () => {
+          this.toggleModal();
+          this.resetForm();
+        },
+        error: (err) => {
+          console.error('Subscription update error:', err);
+          const errorMsg = err?.error?.details || err?.error?.message || err?.message || 'Failed to update. Check your connection and try again.';
+          this.saveError = errorMsg;
+        }
+      });
+    } else {
+      this.expenseService.addSubscription(payload).subscribe({
+        next: () => {
+          this.toggleModal();
+          this.resetForm();
+        },
+        error: (err) => {
+          console.error('Subscription save error:', err);
+          const errorMsg = err?.error?.details || err?.error?.message || err?.message || 'Failed to save. Check your connection and try again.';
+          this.saveError = errorMsg;
+        }
+      });
+    }
   }
 
   deleteSub(id: number) {

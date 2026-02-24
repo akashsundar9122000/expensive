@@ -3,7 +3,8 @@
   stats: stats$ | async,
   transactions: transactions$ | async,
   subscriptions: subscriptions$ | async,
-  budgets: budgets$ | async
+  budgets: budgets$ | async,
+  banks: banks$ | async
 } as data" class="dashboard-wrapper">
 
     <!-- Sidebar -->
@@ -27,20 +28,26 @@
 
             <div class="header-right">
                 <div class="search-box">
-                    <i class="ph ph-magnifying-glass"></i>
+                    <i class="ph ph-magnifying-glass search-btn"></i>
                     <input type="text" placeholder="Search report, transactions...">
                 </div>
-                <button class="icon-btn notification-btn">
-                    <i class="ph ph-bell"></i>
-                    <span class="badge">3</span>
-                </button>
+                <div class="notification-wrapper">
+                    <button class="icon-btn notification-btn" (click)="toggleNotificationPanel()" title="Notifications">
+                        <i class="ph ph-bell"></i>
+                        <span class="badge" *ngIf="(unreadCount$ | async) as unread" [hidden]="unread === 0">{{ unread }}</span>
+                    </button>
+                    <app-notification-panel 
+                        [showPanel]="showNotificationPanel"
+                        (panelClosed)="closeNotificationPanel()">
+                    </app-notification-panel>
+                </div>
                 <div class="profile-dropdown-wrapper">
                     <img [src]="data.user?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=Akash'"
                         alt="Profile" class="profile-img" (click)="showProfileMenu = !showProfileMenu">
 
                     <div class="dropdown-menu profile-menu" *ngIf="showProfileMenu">
                         <a routerLink="/settings"><i class="ph ph-user"></i> Profile Settings</a>
-                        <a routerLink="/all-expenses"><i class="ph ph-receipt"></i> All Expenses</a>
+                        <a routerLink="/expenses"><i class="ph ph-receipt"></i> All Expenses</a>
                         <a href="javascript:void(0)" (click)="logout()" class="logout-link"><i
                                 class="ph ph-sign-out"></i> Logout</a>
                     </div>
@@ -53,7 +60,7 @@
             <div class="overview-grid">
 
                 <!-- Card 1: Total Balance -->
-                <div class="stat-card card">
+                <div class="stat-card card" [class.selector-open]="showBankSelector">
                     <div class="stat-header">
                         <div class="stat-icon-wrap blue-icon">
                             <i class="ph ph-wallet"></i>
@@ -63,12 +70,19 @@
                                 {{ selectedBank }} <i class="ph ph-caret-down"></i>
                             </button>
                             <div class="bank-dropdown" *ngIf="showBankSelector">
-                                <a *ngFor="let bank of data.user?.bankAccounts"
-                                    (click)="selectedBank = bank; showBankSelector = false">
-                                    <i class="ph ph-bank"></i> {{ bank }}
+                                <a *ngFor="let bank of data.banks"
+                                    [class.active]="bank.name === selectedBank"
+                                    (click)="selectBank(bank.name)">
+                                    <span class="bank-drop-icon"><i class="ph ph-bank"></i></span>
+                                    <span class="bank-drop-info">
+                                        <span class="bank-drop-name">{{ bank.name }}</span>
+                                        <span class="bank-drop-bal">₹{{ bank.balance | number:'1.0-0' }}</span>
+                                    </span>
+                                    <i class="ph ph-check bank-drop-check" *ngIf="bank.name === selectedBank"></i>
                                 </a>
                                 <a class="add-bank-opt" (click)="showAddBankModal = true; showBankSelector = false">
-                                    <i class="ph ph-plus"></i> Add Bank
+                                    <span class="bank-drop-icon add-icon"><i class="ph ph-plus"></i></span>
+                                    <span class="bank-drop-name">Add Bank</span>
                                 </a>
                             </div>
                         </div>
@@ -78,10 +92,6 @@
                         <h3 class="stat-amount">
                             {{ (data.stats.bankBalances[selectedBank] || 0) | currency:'INR':'symbol':'1.0-0' }}
                         </h3>
-                        <div class="stat-trend success">
-                            <i class="ph ph-trend-up"></i>
-                            <span>+2.5% <span class="trend-sub">vs last month</span></span>
-                        </div>
                     </div>
                 </div>
 
@@ -97,10 +107,6 @@
                         <h3 class="stat-amount">
                             {{ data.stats.monthlyExpenses | currency:'INR':'symbol':'1.0-0' }}
                         </h3>
-                        <div class="stat-trend danger">
-                            <i class="ph ph-trend-down"></i>
-                            <span>-12.2% <span class="trend-sub">vs last month</span></span>
-                        </div>
                     </div>
                 </div>
 
@@ -134,24 +140,35 @@
                         <div class="stat-icon-wrap green-icon">
                             <i class="ph ph-chart-line-up"></i>
                         </div>
-                        <button class="set-budget-pill" (click)="showModal = true">
-                            <i class="ph ph-plus"></i> Set Budget
-                        </button>
+                        <div class="budget-header-actions">
+                            <button class="set-budget-pill" (click)="toggleModal()">
+                                <i class="ph ph-plus"></i> Set Budget
+                            </button>
+                        </div>
                     </div>
                     <div class="stat-body">
                         <p class="stat-label">Active Budgets</p>
-                        <div class="budget-summary" *ngIf="data.budgets && data.budgets.length > 0; else noBudgets">
-                            <div class="budget-mini-item"
-                                *ngFor="let b of getBudgetProgress(data.transactions || [], data.budgets).slice(0, 2)">
-                                <div class="budget-row">
-                                    <span class="budget-cat">{{ b.category }}</span>
-                                    <span class="budget-pct" [class.over]="b.percent >= 100">{{ b.percent |
-                                        number:'1.0-0' }}%</span>
-                                </div>
-                                <div class="budget-bar-bg">
-                                    <div class="budget-bar-fill" [style.width.%]="b.percent > 100 ? 100 : b.percent"
-                                        [class.warning]="b.status === 'warning'" [class.danger]="b.status === 'danger'">
+                        <div class="budget-scroll-container" *ngIf="data.budgets && data.budgets.length > 0; else noBudgets">
+                            <div class="budget-card-item" *ngFor="let b of cachedBudgetProgress" [class.warning]="b.status === 'warning'" [class.danger]="b.status === 'danger'">
+                                <div class="budget-card-header">
+                                    <div class="budget-card-title">
+                                        <h4>{{ b.category }}</h4>
+                                        <p>₹{{ b.spent | number:'1.0-0' }} / ₹{{ b.limitAmount | number:'1.0-0' }}</p>
                                     </div>
+                                    <div class="budget-card-actions">
+                                        <button class="action-btn edit-btn" (click)="openBudgetEditModal(b)" title="Edit">
+                                            <i class="ph ph-pencil"></i>
+                                        </button>
+                                        <button class="action-btn delete-btn" (click)="openDeleteConfirmModal(b.category)" title="Delete">
+                                            <i class="ph ph-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="budget-card-progress">
+                                    <div class="progress-bar-bg">
+                                        <div class="progress-bar-fill" [style.width.%]="b.percent > 100 ? 100 : b.percent"></div>
+                                    </div>
+                                    <span class="progress-percent" [class.over]="b.percent >= 100">{{ b.percent | number:'1.0-0' }}%</span>
                                 </div>
                             </div>
                         </div>
@@ -172,9 +189,10 @@
                         <div class="header-actions">
                             <button class="export-btn" (click)="exportToCSV()"><i class="ph ph-file-csv"></i> Export
                                 Analysis</button>
+                            <button class="export-btn" (click)="exportToPDF()"><i class="ph ph-file-pdf"></i> PDF
+                                Report</button>
                             <select class="period-select" [(ngModel)]="chartPeriod"
                                 (ngModelChange)="onChartPeriodChange($event)">
-                                <option value="daily">Daily</option>
                                 <option value="weekly">Weekly</option>
                                 <option value="monthly">Monthly</option>
                                 <option value="yearly">Yearly</option>
@@ -191,8 +209,11 @@
                             <span>0</span>
                         </div>
                         <div class="chart-bars">
-                            <div class="bar-col" *ngFor="let bar of chartBars">
-                                <div class="bar" [class.active]="bar.active" [style.height.%]="bar.height"></div>
+                            <div class="bar-col" *ngFor="let bar of chartBars" [attr.data-amount]="bar.amount | number:'1.2-2'">
+                                <div class="bar-wrapper" [title]="'₹' + (bar.amount | number:'1.2-2')">
+                                    <div class="bar" [class.active]="bar.active" [style.height.%]="bar.height"></div>
+                                    <div class="bar-tooltip">₹{{ bar.amount | number:'1.0-0' }}</div>
+                                </div>
                                 <span>{{ bar.label }}</span>
                             </div>
                             <div *ngIf="chartBars.length === 0" class="no-data-msg" style="margin: auto">
@@ -207,16 +228,16 @@
                 <div class="card donut-card">
                     <h3>Top Categories</h3>
 
-                    <div class="donut-container" *ngIf="getTopCategories(data.transactions || []) as topCats">
+                    <div class="donut-container" *ngIf="cachedTopCategories && cachedTopCategories.length > 0 as topCats">
                         <div class="donut-chart">
                             <div class="donut-hole">
-                                <span class="donut-total">{{ getTopCategoryPercent(data.transactions || []) }}%</span>
+                                <span class="donut-total">{{ cachedTopCategoryPercent }}%</span>
                                 <span class="sub-text">Top spend</span>
                             </div>
                         </div>
                     </div>
                     <div class="category-trend-list">
-                        <div class="trend-item" *ngFor="let cat of getTopCategories(data.transactions || [])">
+                        <div class="trend-item" *ngFor="let cat of cachedTopCategories">
                             <div class="trend-info">
                                 <div class="label">
                                     <span>{{ cat.name }}</span>
@@ -284,7 +305,7 @@
                     <div class="subs-list">
                         <div class="sub-item" *ngFor="let s of (data.subscriptions || []).slice(0, 4)">
                             <div class="sub-icon" [style.backgroundColor]="s.color + '20'" [style.color]="s.color">
-                                <i [class]="'ph ' + (s.icon.startsWith('ph-') ? s.icon : 'ph-' + s.icon)"></i>
+                                <i [class]="'ph ' + (s.icon?.startsWith('ph-') ? s.icon : 'ph-' + (s.icon || 'star'))"></i>
                             </div>
                             <div class="sub-details">
                                 <h4>{{ s.name }}</h4>
@@ -325,8 +346,8 @@
                         <input type="number" #budgetLimit placeholder="e.g. 5000">
                     </div>
                     <div class="modal-actions">
-                        <button type="button" class="btn outline" (click)="showModal = false">Cancel</button>
-                        <button type="button" class="btn primary"
+                        <button type="button" class="outline-btn" (click)="showModal = false">Cancel</button>
+                        <button type="button" class="primary-btn"
                             (click)="onSaveBudget(budgetCat.value, +budgetLimit.value)"> Save Budget </button>
                     </div>
                 </form>
@@ -342,14 +363,18 @@
                 <button class="close-btn" (click)="showAddBankModal = false"><i class="ph ph-x"></i></button>
             </div>
             <div class="modal-body">
-                <form class="modal-form" (submit)="onAddBank(newBankName.value); $event.preventDefault()">
+                <form class="modal-form" (submit)="onAddBank(newBankName.value, +newBankBalance.value); $event.preventDefault()">
                     <div class="form-group">
                         <label>Bank Name</label>
                         <input type="text" #newBankName placeholder="e.g. HDFC Bank, ICICI Bank">
                     </div>
+                    <div class="form-group">
+                        <label>Opening Balance (₹)</label>
+                        <input type="number" #newBankBalance placeholder="e.g. 25000" step="0.01">
+                    </div>
                     <div class="modal-actions">
-                        <button type="button" class="btn outline" (click)="showAddBankModal = false">Cancel</button>
-                        <button type="submit" class="btn primary">Add Bank</button>
+                        <button type="button" class="outline-btn" (click)="showAddBankModal = false">Cancel</button>
+                        <button type="submit" class="primary-btn">Add Bank</button>
                     </div>
                 </form>
             </div>
@@ -364,6 +389,45 @@
             <span>{{ toast.message }}</span>
         </div>
         <button class="toast-close" (click)="toast.show = false"><i class="ph ph-x"></i></button>
+    </div>
+
+    <!-- Edit Budget Modal -->
+    <div class="modal-overlay" *ngIf="showBudgetEditModal" (click)="closeBudgetEditModal()">
+        <div class="modal-card" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+                <h3>Edit Budget: {{ editingBudget?.category }}</h3>
+                <button class="close-btn" (click)="closeBudgetEditModal()"><i class="ph ph-x"></i></button>
+            </div>
+            <form (ngSubmit)="saveBudgetFromModal()">
+                <div class="form-group">
+                    <label>Budget Limit (₹)</label>
+                    <input type="number" min="1" step="1" [(ngModel)]="budgetEditValues[editingBudget?.category || '']" name="limitAmount" placeholder="Enter monthly limit" required>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="outline-btn" (click)="closeBudgetEditModal()">Cancel</button>
+                    <button type="submit" class="primary-btn">Save Budget</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay" *ngIf="showDeleteConfirmModal" (click)="closeDeleteConfirmModal()">
+        <div class="confirm-modal-card" (click)="$event.stopPropagation()">
+            <div class="confirm-modal-header">
+                <div class="confirm-icon warning">
+                    <i class="ph ph-warning"></i>
+                </div>
+                <h3>Delete Budget?</h3>
+            </div>
+            <p class="confirm-modal-message">
+                Are you sure you want to delete the budget for <strong>{{ deletingBudgetCategory }}</strong>? This action cannot be undone.
+            </p>
+            <div class="confirm-modal-actions">
+                <button class="outline-btn" (click)="closeDeleteConfirmModal()">Cancel</button>
+                <button class="danger-btn" (click)="confirmDeleteBudget()">Delete Budget</button>
+            </div>
+        </div>
     </div>
 
 </div>

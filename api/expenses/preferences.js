@@ -74,6 +74,6 @@ module.exports = async (req, res) => {
         return res.status(405).json({ error: 'Method not allowed' });
     } catch (err) {
         console.error('Preferences error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        return res.status(500).json({ error: 'Internal server error' });
     }
 };

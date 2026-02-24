@@ -53,13 +53,39 @@ public class ExpenseService {
     }
 
     @Transactional
-    public BankAccount addBank(User user, String bankName) {
+    public BankAccount addBank(User user, String bankName, BigDecimal balance) {
+        BigDecimal initialBalance = balance != null ? balance : BigDecimal.ZERO;
         BankAccount bank = BankAccount.builder()
                 .user(user)
                 .name(bankName)
-                .balance(BigDecimal.ZERO)
+                .balance(initialBalance)
                 .build();
         return bankAccountRepository.save(bank);
+    }
+
+    @Transactional
+    public BankAccount updateBank(User user, Long bankId, String bankName, BigDecimal balance) {
+        BankAccount bank = bankAccountRepository.findByIdAndUser(bankId, user)
+                .orElseThrow();
+        bank.setName(bankName);
+        if (balance != null) {
+            bank.setBalance(balance);
+        }
+        return bankAccountRepository.save(bank);
+    }
+
+    @Transactional
+    public void deleteBank(User user, Long bankId) {
+        BankAccount bank = bankAccountRepository.findByIdAndUser(bankId, user)
+                .orElseThrow();
+
+        List<Transaction> transactions = transactionRepository.findByUserAndBankAccount(user, bank);
+        if (!transactions.isEmpty()) {
+            transactions.forEach(transaction -> transaction.setBankAccount(null));
+            transactionRepository.saveAll(transactions);
+        }
+
+        bankAccountRepository.delete(bank);
     }
 
     public UserPreference getPreferences(User user) {
@@ -95,8 +121,12 @@ public class ExpenseService {
             prefs.setGoalName(updates.getGoalName());
         if (updates.getGoalRequired() != null)
             prefs.setGoalRequired(updates.getGoalRequired());
-        if (updates.getGoalCollected() != null)
+        if (updates.getGoalCollectedIncrement() != null) {
+            BigDecimal current = prefs.getGoalCollected() != null ? prefs.getGoalCollected() : BigDecimal.ZERO;
+            prefs.setGoalCollected(current.add(updates.getGoalCollectedIncrement()));
+        } else if (updates.getGoalCollected() != null) {
             prefs.setGoalCollected(updates.getGoalCollected());
+        }
         if (updates.getTotalInvestment() != null)
             prefs.setTotalInvestment(updates.getTotalInvestment());
         if (updates.getInvestAmount() != null)

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
     View, Text, FlatList, StyleSheet, TouchableOpacity, Alert,
-    RefreshControl, StatusBar, TextInput, Modal,
+    RefreshControl, StatusBar, TextInput, Modal, ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,9 +42,9 @@ export default function InvestmentsScreen() {
     const loadData = useCallback(async () => {
         try {
             const data = await expenseService.getInvestments();
-            setInvestments(data);
-        } catch (err) {
-            console.error('Error loading investments:', err);
+            setInvestments(Array.isArray(data) ? data : []);
+        } catch {
+            // Network error — stale data remains displayed
         }
     }, []);
 
@@ -172,43 +172,49 @@ export default function InvestmentsScreen() {
                     <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>Add Investment</Text>
-                            <TouchableOpacity onPress={() => setShowModal(false)}>
+                            <TouchableOpacity
+                                onPress={() => setShowModal(false)}
+                                accessibilityLabel="Close modal"
+                                accessibilityRole="button"
+                            >
                                 <Ionicons name="close" size={24} color={Colors.textPrimary} />
                             </TouchableOpacity>
                         </View>
 
-                        {/* Type Selector */}
-                        <Text style={styles.label}>Type</Text>
-                        <View style={styles.chipGrid}>
-                            {investmentTypes.map((t) => (
-                                <TouchableOpacity
-                                    key={t}
-                                    style={[styles.chip, type === t && { backgroundColor: getTypeColor(t), borderColor: getTypeColor(t) }]}
-                                    onPress={() => setType(t)}
-                                >
-                                    <Ionicons name={getTypeIcon(t) as any} size={14} color={type === t ? '#FFF' : Colors.textSecondary} />
-                                    <Text style={[styles.chipText, type === t && { color: '#FFF' }]}>{t}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
+                        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                            {/* Type Selector */}
+                            <Text style={styles.label}>Type</Text>
+                            <View style={styles.chipGrid}>
+                                {investmentTypes.map((t) => (
+                                    <TouchableOpacity
+                                        key={t}
+                                        style={[styles.chip, type === t && { backgroundColor: getTypeColor(t), borderColor: getTypeColor(t) }]}
+                                        onPress={() => setType(t)}
+                                    >
+                                        <Ionicons name={getTypeIcon(t) as any} size={14} color={type === t ? '#FFF' : Colors.textSecondary} />
+                                        <Text style={[styles.chipText, type === t && { color: '#FFF' }]}>{t}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
 
-                        <View style={styles.inputContainer}>
-                            <TextInput style={styles.input} placeholder="Investment name" placeholderTextColor={Colors.textMuted} value={name} onChangeText={setName} />
-                        </View>
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.inputCurrency}>₹</Text>
-                            <TextInput style={styles.input} placeholder="Amount" placeholderTextColor={Colors.textMuted} value={amount} onChangeText={setAmount} keyboardType="decimal-pad" />
-                        </View>
-                        <View style={styles.inputContainer}>
-                            <Text style={styles.inputCurrency}>%</Text>
-                            <TextInput style={styles.input} placeholder="Return % (optional)" placeholderTextColor={Colors.textMuted} value={returnPct} onChangeText={setReturnPct} keyboardType="decimal-pad" />
-                        </View>
+                            <View style={styles.inputContainer}>
+                                <TextInput style={styles.input} placeholder="Investment name" placeholderTextColor={Colors.textMuted} value={name} onChangeText={setName} />
+                            </View>
+                            <View style={styles.inputContainer}>
+                                <Text style={styles.inputCurrency}>₹</Text>
+                                <TextInput style={styles.input} placeholder="Amount" placeholderTextColor={Colors.textMuted} value={amount} onChangeText={setAmount} keyboardType="decimal-pad" />
+                            </View>
+                            <View style={styles.inputContainer}>
+                                <Text style={styles.inputCurrency}>%</Text>
+                                <TextInput style={styles.input} placeholder="Return % (optional)" placeholderTextColor={Colors.textMuted} value={returnPct} onChangeText={setReturnPct} keyboardType="decimal-pad" />
+                            </View>
 
-                        <TouchableOpacity style={styles.submitBtn} onPress={handleAdd} disabled={loading}>
-                            <LinearGradient colors={Colors.gradientSuccess as any} style={styles.submitGradient}>
-                                <Text style={styles.submitText}>{loading ? 'Adding...' : 'Add Investment'}</Text>
-                            </LinearGradient>
-                        </TouchableOpacity>
+                            <TouchableOpacity style={styles.submitBtn} onPress={handleAdd} disabled={loading}>
+                                <LinearGradient colors={Colors.gradientSuccess as any} style={styles.submitGradient}>
+                                    <Text style={styles.submitText}>{loading ? 'Adding...' : 'Add Investment'}</Text>
+                                </LinearGradient>
+                            </TouchableOpacity>
+                        </ScrollView>
                     </View>
                 </View>
             </Modal>

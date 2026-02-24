@@ -32,12 +32,18 @@
     flex-direction: column;
     justify-content: space-between;
     min-height: 180px;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    position: relative;
+    z-index: 0;
+    transition: box-shadow 0.2s ease;
 }
 
 .stat-card:hover {
-    transform: translateY(-2px);
     box-shadow: var(--shadow-md);
+}
+
+/* Lift above siblings when bank dropdown is open so it's never covered */
+.stat-card.selector-open {
+    z-index: 10;
 }
 
 /* --- Stat Header Row --- */
@@ -110,38 +116,99 @@
     position: absolute;
     top: calc(100% + 8px);
     right: 0;
-    background: var(--bg-card);
-    border: 1px solid var(--border-light);
-    border-radius: 14px;
-    padding: 8px;
-    min-width: 160px;
-    box-shadow: var(--shadow-md);
+    background-color: var(--bg-card);
+    border: 1.5px solid var(--border-light);
+    border-radius: 16px;
+    padding: 6px;
+    min-width: 200px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.08);
     z-index: 200;
+    animation: dropIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dropIn {
+    from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .bank-dropdown a {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 9px 12px;
+    padding: 9px 10px;
     border-radius: 10px;
     font-size: 13px;
     font-weight: 500;
     color: var(--text-main);
     text-decoration: none;
     cursor: pointer;
-    transition: background 0.15s;
+    transition: background 0.12s;
+    position: relative;
 }
 
 .bank-dropdown a:hover {
     background: var(--bg-hover);
 }
 
-.bank-dropdown .add-bank-opt {
+.bank-dropdown a.active {
+    background: var(--primary-blue-light);
+}
+
+.bank-drop-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: var(--bg-hover);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
     color: var(--primary-blue);
+    flex-shrink: 0;
+}
+
+.bank-drop-icon.add-icon {
+    background: rgba(59,130,246,0.1);
+    color: var(--primary-blue);
+}
+
+.bank-drop-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.bank-drop-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dark);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.bank-drop-bal {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-top: 1px;
+}
+
+.bank-drop-check {
+    font-size: 15px;
+    color: var(--primary-blue);
+    flex-shrink: 0;
+}
+
+.bank-dropdown .add-bank-opt {
     border-top: 1px solid var(--border-light);
     margin-top: 4px;
     padding-top: 10px;
+}
+
+.bank-dropdown .add-bank-opt .bank-drop-name {
+    color: var(--primary-blue);
 }
 
 /* --- Set Budget Pill Button --- */
@@ -163,6 +230,13 @@
 
 .set-budget-pill:hover {
     background: rgba(16, 185, 129, 0.2);
+}
+
+.budget-header-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
 }
 
 /* --- Stat Body Text --- */
@@ -225,62 +299,225 @@
     transition: width 0.8s ease-out;
 }
 
-/* --- Budget Summary inside card --- */
-.budget-summary {
-    margin-top: 6px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+/* --- Budget Scroll Container --- */
+.budget-scroll-container {
+    margin-top: 8px;
+    max-height: 280px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
 }
 
-.budget-mini-item {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
+.budget-scroll-container::-webkit-scrollbar {
+    width: 5px;
 }
 
-.budget-row {
+.budget-scroll-container::-webkit-scrollbar-track {
+    background: var(--bg-chip);
+    border-radius: 3px;
+}
+
+.budget-scroll-container::-webkit-scrollbar-thumb {
+    background: var(--text-muted);
+    border-radius: 3px;
+}
+
+.budget-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: var(--text-dark);
+}
+
+.budget-scroll-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 85px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 6px;
+    scroll-behavior: smooth;
+}
+
+.budget-scroll-container::-webkit-scrollbar {
+    width: 5px;
+}
+
+.budget-scroll-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.budget-scroll-container::-webkit-scrollbar-thumb {
+    background: var(--text-muted);
+    border-radius: 2px;
+}
+
+.budget-scroll-container::-webkit-scrollbar-thumb:hover {
+    background: var(--text-dark);
+}
+
+.budget-card-item {
+    padding: 10px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--bg-input) 0%, var(--bg-hover) 100%);
+    border-left: 3px solid var(--success-green);
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+    flex-shrink: 0;
+    width: 100%;
+    min-height: 70px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.budget-card-item:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
+}
+
+.budget-card-item.warning {
+    border-left-color: var(--warning-orange);
+}
+
+.budget-card-item.danger {
+    border-left-color: var(--danger-red);
+}
+
+.budget-card-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    margin-bottom: 6px;
+    gap: 6px;
 }
 
-.budget-cat {
+.budget-card-title {
+    flex: 1;
+    min-width: 0;
+}
+
+.budget-card-title h4 {
+    margin: 0;
     font-size: 12px;
     font-weight: 600;
     color: var(--text-dark);
+    margin-bottom: 2px;
 }
 
-.budget-pct {
-    font-size: 12px;
-    font-weight: 700;
+.budget-card-title p {
+    margin: 0;
+    font-size: 10px;
     color: var(--text-muted);
+    font-weight: 500;
 }
 
-.budget-pct.over {
-    color: var(--danger-red);
+.budget-card-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
 }
 
-.budget-bar-bg {
-    height: 6px;
+.budget-card-item:hover .budget-card-actions {
+    opacity: 1;
+}
+
+.action-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 5px;
+    border: none;
+    background: var(--bg-chip);
+    color: var(--text-dark);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.action-btn:hover {
+    background: var(--bg-hover);
+    transform: scale(1.1);
+}
+
+.action-btn.edit-btn:hover {
+    background: rgba(59, 130, 246, 0.1);
+    color: #3b82f6;
+}
+
+.action-btn.delete-btn:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.budget-card-progress {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.progress-bar-bg {
+    flex: 1;
+    height: 5px;
     background: var(--bg-chip);
     border-radius: 3px;
     overflow: hidden;
 }
 
-.budget-bar-fill {
+.progress-bar-fill {
     height: 100%;
-    background: var(--success-green);
+    background: linear-gradient(90deg, #10b981 0%, #059669 100%);
     border-radius: 3px;
     transition: width 0.8s ease-out;
 }
 
-.budget-bar-fill.warning {
-    background: var(--warning-orange);
+.budget-card-item.warning .progress-bar-fill {
+    background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
 }
 
-.budget-bar-fill.danger {
-    background: var(--danger-red);
+.budget-card-item.danger .progress-bar-fill {
+    background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+}
+
+.progress-percent {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    min-width: 28px;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.progress-percent.over {
+    color: var(--danger-red);
+}
+
+.budget-action-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: none;
+    background: var(--bg-chip);
+    color: var(--text-muted);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+    font-size: 15px;
+    flex-shrink: 0;
+}
+
+.budget-action-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-dark);
+}
+
+.budget-action-btn.danger:hover {
+    background: #fee2e2;
+    color: #ef4444;
 }
 
 .no-data-msg {
@@ -410,21 +647,44 @@
     color: var(--primary-blue);
 }
 
+.notification-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.notification-btn {
+    position: relative;
+}
+
 .notification-btn .badge {
     position: absolute;
-    top: 6px;
-    right: 6px;
-    background-color: var(--danger-red);
+    top: -8px;
+    right: -8px;
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
     color: white;
-    font-size: 9px;
-    font-weight: bold;
-    height: 14px;
-    width: 14px;
+    font-size: 11px;
+    font-weight: 700;
+    height: 20px;
+    min-width: 20px;
+    padding: 0 5px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 2px solid var(--bg-card);
+    border: 2.5px solid var(--bg-card);
+    animation: badge-pulse 2s infinite;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+    line-height: 1;
+}
+
+@keyframes badge-pulse {
+    0%, 100% {
+        box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+    }
+    50% {
+        box-shadow: 0 2px 12px rgba(239, 68, 68, 0.6);
+    }
 }
 
 .profile-img {
@@ -497,6 +757,36 @@
 .bar:hover {
     background-color: var(--primary-blue);
     box-shadow: 0 8px 16px rgba(59, 130, 246, 0.3);
+}
+
+.bar-wrapper {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    height: 100%;
+}
+
+.bar-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--primary-blue);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    margin-bottom: 4px;
+    z-index: 10;
+}
+
+.bar-wrapper:hover .bar-tooltip {
+    opacity: 1;
 }
 
 .bar-col span {
@@ -812,6 +1102,132 @@ td b {
     justify-content: flex-end;
     gap: 12px;
     margin-top: 8px;
+}
+
+/* Confirmation Modal */
+.confirm-modal-card {
+    background: var(--bg-modal);
+    border: 1px solid var(--border-light);
+    border-radius: 20px;
+    max-width: 400px;
+    width: 90%;
+    padding: 32px 24px;
+    text-align: center;
+    animation: slideUp 0.3s ease;
+}
+
+.confirm-modal-header {
+    margin-bottom: 20px;
+}
+
+.confirm-icon {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+}
+
+.confirm-icon.warning {
+    background: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+}
+
+.confirm-icon.danger {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.confirm-modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-dark);
+}
+
+.confirm-modal-message {
+    margin: 0 0 24px;
+    font-size: 14px;
+    color: var(--text-muted);
+    line-height: 1.6;
+}
+
+.confirm-modal-message strong {
+    color: var(--text-dark);
+}
+
+.confirm-modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.confirm-modal-actions button {
+    flex: 1;
+    padding: 10px 16px;
+    border-radius: 10px;
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.danger-btn {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+}
+
+.danger-btn:hover {
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+    transform: translateY(-1px);
+}
+
+form .form-group {
+    margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+form label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+form input,
+form select,
+form textarea {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--border-light);
+    background: var(--bg-input);
+    color: var(--text-dark);
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.2s ease;
+}
+
+form input:focus,
+form select:focus,
+form textarea:focus {
+    outline: none;
+    border-color: var(--primary-blue);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 24px;
 }
 
 /* Profile Dropdown Wrapper */

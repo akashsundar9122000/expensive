@@ -15,9 +15,9 @@ export default function TransactionsScreen({ navigation }: any) {
     const loadTransactions = useCallback(async () => {
         try {
             const data = await expenseService.getTransactions();
-            setTransactions(data);
-        } catch (err) {
-            console.error('Error loading transactions:', err);
+            setTransactions(Array.isArray(data) ? data : []);
+        } catch {
+            // Network error — stale data remains displayed
         }
     }, []);
 

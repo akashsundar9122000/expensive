@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ExpenseService } from '../../services/expense.service';
 import { AuthService } from '../../services/auth.service';
 import { ThemeService } from '../../services/theme.service';
-import { User, DashboardStats } from '../../services/models';
+import { User, Bank } from '../../services/models';
 import { Observable } from 'rxjs';
 import { SidebarComponent } from '../../shared/sidebar/sidebar.component';
 import { FormsModule } from '@angular/forms';
@@ -54,7 +54,7 @@ import { FormsModule } from '@angular/forms';
 
                 <label>Select Avatar</label>
                 <div class="avatar-grid">
-                    <div class="avatar-option" *ngFor="let av of avatars" 
+                    <div class="avatar-option" *ngFor="let av of avatars"
                          [class.selected]="(user$ | async)?.avatar === av"
                          (click)="selectAvatar(av)">
                         <img [src]="av" alt="Avatar">
@@ -76,21 +76,53 @@ import { FormsModule } from '@angular/forms';
               <div class="bank-management">
                 <h3>Bank Accounts</h3>
                 <p class="sub-text">Add your bank accounts to track balances</p>
-                
+
                 <div class="bank-list">
-                  <div class="bank-item" *ngFor="let bank of (user$ | async)?.bankAccounts || []">
-                    <div class="bank-info">
-                       <i class="ph ph-bank"></i>
-                       <span>{{ bank }}</span>
+                  <div *ngFor="let bank of (banks$ | async) || []">
+                    <!-- Edit mode -->
+                    <div class="bank-item" *ngIf="editingBankId == bank.id">
+                      <div class="bank-edit-row">
+                        <input class="bank-edit-input" [(ngModel)]="editingBankName"
+                               (keyup.enter)="saveEdit(bank)" (keyup.escape)="cancelEdit()">
+                        <input class="bank-edit-input bank-edit-balance" type="number" step="0.01"
+                               [(ngModel)]="editingBankBalance"
+                               (keyup.enter)="saveEdit(bank)" (keyup.escape)="cancelEdit()">
+                      </div>
+                      <div class="bank-actions">
+                        <button class="icon-btn save-btn" (click)="saveEdit(bank)" title="Save">
+                          <i class="ph ph-check"></i>
+                        </button>
+                        <button class="icon-btn cancel-btn" (click)="cancelEdit()" title="Cancel">
+                          <i class="ph ph-x"></i>
+                        </button>
+                      </div>
                     </div>
-                    <span class="bank-balance-text">₹{{ (stats$ | async)?.bankBalances?.[bank] || 0 | number }}</span>
+                    <!-- View mode -->
+                    <div class="bank-item" *ngIf="editingBankId != bank.id">
+                      <div class="bank-info">
+                         <i class="ph ph-bank"></i>
+                         <div>
+                           <span class="bank-name">{{ bank.name }}</span>
+                           <span class="bank-balance">₹{{ bank.balance | number }}</span>
+                         </div>
+                      </div>
+                      <div class="bank-actions">
+                        <button class="icon-btn edit-btn" (click)="startEdit(bank)" title="Edit">
+                          <i class="ph ph-pencil-simple"></i>
+                        </button>
+                        <button class="icon-btn delete-btn" (click)="deleteBank(bank)" title="Delete">
+                          <i class="ph ph-trash"></i>
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <p *ngIf="!((user$ | async)?.bankAccounts?.length)" class="no-banks">No bank accounts added.</p>
+                  <p *ngIf="!((banks$ | async)?.length)" class="no-banks">No bank accounts added yet.</p>
                 </div>
 
-                <div class="input-group">
-                  <input type="text" [(ngModel)]="newBankName" placeholder="Bank Name (e.g. HDFC)">
-                  <button class="outline-btn" (click)="addBank()" [disabled]="!newBankName">Add Bank</button>
+                <div class="input-group bank-add-group" style="margin-top: 16px;">
+                  <input type="text" [(ngModel)]="newBankName" placeholder="Bank Name (e.g. HDFC)" (keyup.enter)="addBank()">
+                  <input type="number" step="0.01" [(ngModel)]="newBankBalance" placeholder="Opening Balance" (keyup.enter)="addBank()">
+                  <button class="outline-btn" (click)="addBank()" [disabled]="!newBankName.trim()">Add Bank</button>
                 </div>
               </div>
 
@@ -130,7 +162,7 @@ import { FormsModule } from '@angular/forms';
                 </div>
                 <span class="currency-display">₹ INR</span>
               </div>
-              
+
               <button class="danger-btn" style="width: 100%; margin-top: 32px;" (click)="logout()">
                 <i class="ph ph-sign-out"></i> Sign Out
               </button>
@@ -139,16 +171,36 @@ import { FormsModule } from '@angular/forms';
         </div>
       </div>
     </main>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="confirm-overlay" *ngIf="showDeleteConfirm" (click)="cancelDelete()">
+      <div class="confirm-card" (click)="$event.stopPropagation()">
+        <div class="confirm-icon-wrap">
+          <i class="ph ph-trash"></i>
+        </div>
+        <h3 class="confirm-title">Delete Bank Account?</h3>
+        <p class="confirm-msg">
+          You're about to delete <strong>{{ bankToDelete?.name }}</strong>.
+          This action cannot be undone. Existing transactions linked to this account will be retained.
+        </p>
+        <div class="confirm-actions">
+          <button class="cancel-action-btn" (click)="cancelDelete()">Cancel</button>
+          <button class="delete-action-btn" (click)="confirmDelete()">
+            <i class="ph ph-trash"></i> Delete
+          </button>
+        </div>
+      </div>
+    </div>
   `,
   styles: [`
     .settings-grid { display: grid; grid-template-columns: 1fr 1.5fr; gap: 24px; }
     .profile-card { padding: 36px; text-align: center; }
     .avatar-container { margin-bottom: 20px; display: flex; justify-content: center; }
-    .avatar-container img, .fallback-avatar { 
-      width: 100px; height: 100px; border-radius: 50%; 
+    .avatar-container img, .fallback-avatar {
+      width: 100px; height: 100px; border-radius: 50%;
       border: 4px solid var(--primary-blue-light); object-fit: cover;
     }
-    .fallback-avatar { 
+    .fallback-avatar {
        background: var(--bg-chip); color: var(--text-muted);
        display: flex; align-items: center; justify-content: center; font-size: 40px;
     }
@@ -159,8 +211,8 @@ import { FormsModule } from '@angular/forms';
     .profile-actions label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 8px; color: var(--text-muted); }
 
     .avatar-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 8px; }
-    .avatar-option { 
-        width: 100%; aspect-ratio: 1; border-radius: 12px; overflow: hidden; 
+    .avatar-option {
+        width: 100%; aspect-ratio: 1; border-radius: 12px; overflow: hidden;
         cursor: pointer; border: 2px solid transparent; transition: all 0.2s;
         background: var(--bg-chip);
     }
@@ -170,12 +222,43 @@ import { FormsModule } from '@angular/forms';
 
     .settings-list { padding: 36px; }
     .sub-text { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
-    .bank-list { margin: 20px 0; }
-    .bank-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: var(--bg-hover); border-radius: 12px; margin-bottom: 8px; }
-    .bank-info { display: flex; align-items: center; gap: 12px; font-weight: 500; color: var(--text-dark); }
-    .bank-info i { font-size: 20px; color: var(--primary-blue); }
-    .bank-balance-text { font-weight: 600; color: var(--text-dark); }
-    .no-banks { color: var(--text-muted); font-size: 13px; }
+    .bank-list { margin: 16px 0 0; display: flex; flex-direction: column; gap: 8px; }
+
+    .bank-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 12px 14px; background: var(--bg-hover); border-radius: 12px;
+    }
+    .bank-info { display: flex; align-items: center; gap: 12px; }
+    .bank-info > i { font-size: 20px; color: var(--primary-blue); flex-shrink: 0; }
+    .bank-name { display: block; font-weight: 500; color: var(--text-dark); font-size: 14px; }
+    .bank-balance { display: block; font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    .bank-actions { display: flex; gap: 6px; }
+    .icon-btn {
+      width: 32px; height: 32px; border-radius: 8px; border: none;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; font-size: 16px; transition: background 0.15s;
+    }
+    .edit-btn { background: var(--bg-chip); color: var(--text-muted); }
+    .edit-btn:hover { background: var(--primary-blue-light); color: var(--primary-blue); }
+    .delete-btn { background: var(--bg-chip); color: var(--text-muted); }
+    .delete-btn:hover { background: #fee2e2; color: #ef4444; }
+    .save-btn { background: var(--primary-blue-light); color: var(--primary-blue); }
+    .save-btn:hover { background: var(--primary-blue); color: #fff; }
+    .cancel-btn { background: var(--bg-chip); color: var(--text-muted); }
+    .cancel-btn:hover { background: var(--bg-hover); color: var(--text-dark); }
+
+    .bank-edit-input {
+      flex: 1; padding: 6px 10px; border-radius: 8px;
+      border: 1.5px solid var(--primary-blue); background: var(--bg-main);
+      color: var(--text-dark); font-size: 14px; outline: none;
+      margin-right: 8px;
+    }
+    .bank-edit-row { display: flex; align-items: center; gap: 8px; flex: 1; }
+    .bank-edit-balance { max-width: 140px; }
+    .bank-add-group input[type="number"] { max-width: 160px; }
+
+    .no-banks { color: var(--text-muted); font-size: 13px; padding: 8px 0; }
 
     .divider { margin: 32px 0; border: none; border-top: 1px solid var(--border-light); }
 
@@ -203,15 +286,72 @@ import { FormsModule } from '@angular/forms';
       .settings-grid { grid-template-columns: 1fr; }
     }
 
+    /* Delete Confirmation Modal */
+    .confirm-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45); backdrop-filter: blur(6px);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000; animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .confirm-card {
+      background: var(--bg-card); border-radius: 24px;
+      padding: 36px 32px; width: 380px; max-width: 92%;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.18);
+      text-align: center;
+      animation: scaleIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    @keyframes scaleIn { from { opacity:0; transform: scale(0.88); } to { opacity:1; transform: scale(1); } }
+
+    .confirm-icon-wrap {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: rgba(239,68,68,0.1); color: #ef4444;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px; margin: 0 auto 20px;
+    }
+
+    .confirm-title {
+      font-size: 18px; font-weight: 700;
+      color: var(--text-dark); margin-bottom: 12px;
+    }
+
+    .confirm-msg {
+      font-size: 14px; color: var(--text-muted);
+      line-height: 1.6; margin-bottom: 28px;
+    }
+    .confirm-msg strong { color: var(--text-dark); }
+
+    .confirm-actions {
+      display: flex; gap: 12px;
+    }
+    .cancel-action-btn {
+      flex: 1; padding: 12px; border-radius: 12px;
+      border: 1.5px solid var(--border-light);
+      background: var(--bg-chip); color: var(--text-dark);
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .cancel-action-btn:hover { background: var(--bg-hover); }
+
+    .delete-action-btn {
+      flex: 1; padding: 12px; border-radius: 12px; border: none;
+      background: #ef4444; color: #fff;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      transition: background 0.15s;
+    }
+    .delete-action-btn:hover { background: #dc2626; }
+
     @media (max-width: 768px) {
         .menu-trigger {
             display: flex !important;
         }
-        
+
         .profile-card, .settings-list {
             padding: 24px;
         }
-        
+
         .avatar-grid {
             grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
         }
@@ -221,11 +361,17 @@ import { FormsModule } from '@angular/forms';
 })
 export class SettingsComponent implements OnInit {
   user$!: Observable<User | null>;
-  stats$!: Observable<DashboardStats>;
+  banks$!: Observable<Bank[]>;
   avatarUrl: string = '';
   newUserName: string = '';
   newBankName: string = '';
+  newBankBalance: number | null = null;
   isMobileMenuOpen = false;
+  editingBankId: number | null = null;
+  editingBankName: string = '';
+  editingBankBalance: number | null = null;
+  showDeleteConfirm = false;
+  bankToDelete: Bank | null = null;
 
   avatars = [
     'https://api.dicebear.com/7.x/avataaars/svg?seed=Felix',
@@ -246,7 +392,7 @@ export class SettingsComponent implements OnInit {
 
   ngOnInit() {
     this.user$ = this.expenseService.getUser();
-    this.stats$ = this.expenseService.getStats();
+    this.banks$ = this.expenseService.getBanks();
     this.user$.subscribe(user => {
       if (user) {
         this.avatarUrl = user.avatar || '';
@@ -270,12 +416,53 @@ export class SettingsComponent implements OnInit {
     }
   }
 
-
   addBank() {
     if (this.newBankName.trim()) {
-      this.expenseService.addBank(this.newBankName.trim());
+      const balance = this.newBankBalance != null ? this.newBankBalance : 0;
+      this.expenseService.addBank(this.newBankName.trim(), balance);
       this.newBankName = '';
+      this.newBankBalance = null;
     }
+  }
+
+  startEdit(bank: Bank) {
+    this.editingBankId = bank.id;
+    this.editingBankName = bank.name;
+    this.editingBankBalance = bank.balance;
+  }
+
+  saveEdit(bank: Bank) {
+    const trimmedName = this.editingBankName.trim();
+    const normalizedBalance = this.editingBankBalance != null ? this.editingBankBalance : bank.balance;
+    const nameChanged = trimmedName && trimmedName !== bank.name;
+    const balanceChanged = normalizedBalance !== bank.balance;
+    if (trimmedName && (nameChanged || balanceChanged)) {
+      this.expenseService.updateBank(bank.id, trimmedName, normalizedBalance);
+    }
+    this.cancelEdit();
+  }
+
+  cancelEdit() {
+    this.editingBankId = null;
+    this.editingBankName = '';
+    this.editingBankBalance = null;
+  }
+
+  deleteBank(bank: Bank) {
+    this.bankToDelete = bank;
+    this.showDeleteConfirm = true;
+  }
+
+  confirmDelete() {
+    if (this.bankToDelete) {
+      this.expenseService.deleteBank(this.bankToDelete.id);
+    }
+    this.cancelDelete();
+  }
+
+  cancelDelete() {
+    this.showDeleteConfirm = false;
+    this.bankToDelete = null;
   }
 
   logout() {

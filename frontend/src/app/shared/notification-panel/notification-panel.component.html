@@ -1,0 +1,55 @@
+<div class="notification-panel" *ngIf="showPanel">
+    <div class="notification-panel-header">
+        <h3>Notifications</h3>
+        <div class="notification-panel-actions">
+            <button class="icon-action" (click)="markAllAsRead()" [hidden]="(unreadCount$ | async) === 0" title="Mark all as read">
+                <i class="ph ph-check-double"></i>
+            </button>
+            <button class="icon-action" (click)="closePanel()" title="Close">
+                <i class="ph ph-x"></i>
+            </button>
+        </div>
+    </div>
+
+    <div class="notification-panel-content">
+        <div *ngIf="(notifications$ | async) as notifs; else emptyState">
+            <div *ngIf="notifs.length > 0" class="notification-list">
+                <div *ngFor="let notif of notifs" class="notification-item" [class.unread]="!notif.read" (click)="markAsRead(notif.id!)">
+                    <div class="notif-icon" [class]="'icon-' + notif.type">
+                        <i [class]="'ph ' + (notif.icon || getIconForType(notif.type))"></i>
+                    </div>
+                    <div class="notif-content">
+                        <p class="notif-title">{{ notif.title }}</p>
+                        <p class="notif-message">{{ notif.message }}</p>
+                        <span class="notif-time">{{ formatTime(notif.timestamp) }}</span>
+                    </div>
+                    <button class="notif-delete" (click)="deleteNotification(notif.id!); $event.stopPropagation()" title="Delete">
+                        <i class="ph ph-trash"></i>
+                    </button>
+                </div>
+            </div>
+            <ng-template [ngIf]="notifs.length === 0">
+                <div class="empty-notifications">
+                    <i class="ph ph-bell-slash"></i>
+                    <p>No notifications</p>
+                    <span class="text-muted">You're all caught up!</span>
+                </div>
+            </ng-template>
+        </div>
+
+        <ng-template #emptyState>
+            <div class="empty-notifications">
+                <i class="ph ph-bell-slash"></i>
+                <p>No notifications</p>
+                <span class="text-muted">You're all caught up!</span>
+            </div>
+        </ng-template>
+    </div>
+
+    <div class="notification-panel-footer" *ngIf="(notifications$ | async) as notifs" [hidden]="notifs.length === 0">
+        <button class="clear-all-btn" (click)="clearAll()">Clear All</button>
+    </div>
+</div>
+
+<!-- Overlay to close panel when clicking outside -->
+<div class="notification-overlay" *ngIf="showPanel" (click)="closePanel()"></div>

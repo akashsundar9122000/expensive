@@ -1,0 +1,57 @@
+const express = require('express');
+const app = express();
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Load handlers
+const auth = require('./api/auth');
+const transactions = require('./api/expenses/transactions');
+const subscriptions = require('./api/expenses/subscriptions');
+const investments = require('./api/expenses/investments');
+const budgets = require('./api/expenses/budgets');
+const stats = require('./api/expenses/stats');
+const preferences = require('./api/expenses/preferences');
+const banks = require('./api/expenses/banks');
+
+// Helper: adapt Vercel-style handler (req, res) to Express
+function handle(handler) {
+    return (req, res) => {
+        // Merge path params into query for DELETE /transactions/:id etc.
+        req.query = { ...req.query, ...req.params };
+        return handler(req, res);
+    };
+}
+
+// Auth
+app.all('/api/auth', handle(auth));
+app.all('/api/auth/*', handle(auth));
+
+// Transactions: DELETE /api/expenses/transactions/:id must pass id as query param
+app.all('/api/expenses/transactions/:id', handle(transactions));
+app.all('/api/expenses/transactions', handle(transactions));
+
+// Subscriptions
+app.all('/api/expenses/subscriptions/:id', handle(subscriptions));
+app.all('/api/expenses/subscriptions', handle(subscriptions));
+
+// Investments
+app.all('/api/expenses/investments/:id', handle(investments));
+app.all('/api/expenses/investments', handle(investments));
+
+// Budgets
+app.all('/api/expenses/budgets', handle(budgets));
+
+// Stats
+app.all('/api/expenses/stats', handle(stats));
+
+// Preferences
+app.all('/api/expenses/preferences', handle(preferences));
+
+// Banks
+app.all('/api/expenses/banks', handle(banks));
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`API server running at http://localhost:${PORT}`);
+});

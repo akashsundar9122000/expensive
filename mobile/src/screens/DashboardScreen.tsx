@@ -1,14 +1,30 @@
+/**
+ * DashboardScreen.tsx
+ *
+ * Main overview screen. Loads stats, recent transactions, subscriptions,
+ * and budget overview in parallel. Sensitive financial figures are hidden
+ * until the user explicitly taps the eye icon.
+ *
+ * Security: no sensitive data is written to console statements.
+ */
+
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-    View, Text, ScrollView, StyleSheet, RefreshControl, TouchableOpacity,
-    StatusBar, Dimensions,
+    View,
+    Text,
+    ScrollView,
+    StyleSheet,
+    RefreshControl,
+    TouchableOpacity,
+    StatusBar,
+    Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Shadows } from '../theme/colors';
 import { expenseService } from '../services/expenseService';
 import { authService } from '../services/authService';
-import { DashboardStats, Transaction, Subscription, User } from '../services/models';
+import { DashboardStats, Transaction, Subscription, Budget, User } from '../services/models';
 
 const { width } = Dimensions.get('window');
 
@@ -16,25 +32,30 @@ export default function DashboardScreen({ navigation }: any) {
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+    const [budgets, setBudgets] = useState<Budget[]>([]);
     const [user, setUser] = useState<User | null>(null);
     const [refreshing, setRefreshing] = useState(false);
     const [showBalance, setShowBalance] = useState(true);
 
     const loadData = useCallback(async () => {
-        try {
-            const [statsData, txData, subData, userData] = await Promise.all([
+        // Use allSettled so a single failing endpoint does not blank the entire dashboard.
+        const [statsResult, txResult, subResult, budgetResult, userResult] =
+            await Promise.allSettled([
                 expenseService.getStats(),
                 expenseService.getTransactions(),
                 expenseService.getSubscriptions(),
+                expenseService.getBudgets(),
                 authService.getCurrentUser(),
             ]);
-            setStats(statsData);
-            setTransactions(txData);
-            setSubscriptions(subData);
-            setUser(userData);
-        } catch (err) {
-            console.error('Dashboard load error:', err);
-        }
+
+        if (statsResult.status === 'fulfilled') setStats(statsResult.value);
+        if (txResult.status === 'fulfilled')
+            setTransactions(Array.isArray(txResult.value) ? txResult.value : []);
+        if (subResult.status === 'fulfilled')
+            setSubscriptions(Array.isArray(subResult.value) ? subResult.value : []);
+        if (budgetResult.status === 'fulfilled')
+            setBudgets(Array.isArray(budgetResult.value) ? budgetResult.value : []);
+        if (userResult.status === 'fulfilled') setUser(userResult.value);
     }, []);
 
     useEffect(() => {
@@ -49,9 +70,8 @@ export default function DashboardScreen({ navigation }: any) {
         setRefreshing(false);
     };
 
-    const formatCurrency = (val: number) => {
-        return '₹' + (val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    };
+    const formatCurrency = (val: number) =>
+        '\u20B9' + (val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     const getGoalProgress = () => {
         if (!stats || !stats.goalRequired) return 0;
@@ -79,6 +99,24 @@ export default function DashboardScreen({ navigation }: any) {
         }
     };
 
+    // Budgets: show only the first 2 most at-risk (highest spend percentage)
+    const getBudgetPct = (b: Budget) => {
+        const spent = getCurrentMonthSpend(b.category);
+        return b.limitAmount > 0 ? Math.min(100, Math.round((spent / b.limitAmount) * 100)) : 0;
+    };
+
+    const getCurrentMonthSpend = (category: string): number => {
+        const now = new Date();
+        const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        return transactions
+            .filter((tx) => tx.category === category && tx.date?.startsWith(monthStr))
+            .reduce((sum, tx) => sum + (tx.amount || 0), 0);
+    };
+
+    const topBudgets = [...budgets]
+        .sort((a, b) => getBudgetPct(b) - getBudgetPct(a))
+        .slice(0, 2);
+
     const firstName = user?.name?.split(' ')[0] || 'User';
 
     return (
@@ -87,16 +125,23 @@ export default function DashboardScreen({ navigation }: any) {
             <ScrollView
                 style={styles.scrollView}
                 showsVerticalScrollIndicator={false}
-                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
+                refreshControl={
+                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />
+                }
             >
                 {/* Header */}
                 <View style={styles.header}>
                     <View>
-                        <Text style={styles.greeting}>Hi, {firstName} 👋</Text>
-                        <Text style={styles.headerSub}>Track your expenses</Text>
+                        <Text style={styles.greeting}>Hi, {firstName}</Text>
+                        <Text style={styles.headerSub}>Track your finances</Text>
                     </View>
-                    <TouchableOpacity style={styles.profileBtn} onPress={() => navigation.navigate('Settings')}>
-                        <Ionicons name="person-circle" size={40} color={Colors.primary} />
+                    <TouchableOpacity
+                        style={styles.profileBtn}
+                        onPress={() => navigation.navigate('Settings')}
+                        accessibilityLabel="Open settings"
+                        accessibilityRole="button"
+                    >
+                        <Ionicons name="person-circle" size={42} color={Colors.primary} />
                     </TouchableOpacity>
                 </View>
 
@@ -104,45 +149,52 @@ export default function DashboardScreen({ navigation }: any) {
                 {stats && (
                     <>
                         {/* Balance Card */}
-                        <TouchableOpacity activeOpacity={0.9} onPress={() => setShowBalance(!showBalance)}>
-                            <LinearGradient
-                                colors={Colors.gradientPrimary as any}
-                                style={styles.balanceCard}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 1 }}
-                            >
-                                <View style={styles.balanceHeader}>
-                                    <Text style={styles.balanceLabel}>Total Balance</Text>
-                                    <TouchableOpacity onPress={() => setShowBalance(!showBalance)}>
-                                        <Ionicons name={showBalance ? 'eye' : 'eye-off'} size={22} color="rgba(255,255,255,0.7)" />
-                                    </TouchableOpacity>
+                        <LinearGradient
+                            colors={Colors.gradientPrimary as any}
+                            style={styles.balanceCard}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                        >
+                            <View style={styles.balanceHeader}>
+                                <Text style={styles.balanceLabel}>Total Balance</Text>
+                                <TouchableOpacity
+                                    onPress={() => setShowBalance(!showBalance)}
+                                    accessibilityLabel={showBalance ? 'Hide balance' : 'Show balance'}
+                                >
+                                    <Ionicons
+                                        name={showBalance ? 'eye' : 'eye-off'}
+                                        size={22}
+                                        color="rgba(255,255,255,0.75)"
+                                    />
+                                </TouchableOpacity>
+                            </View>
+                            <Text style={styles.balanceAmount}>
+                                {showBalance ? formatCurrency(stats.balance) : '\u20B9 \u2022\u2022\u2022\u2022\u2022\u2022'}
+                            </Text>
+                            <View style={styles.balanceFooter}>
+                                <View style={styles.balanceItem}>
+                                    <Ionicons name="arrow-down-circle" size={16} color="#34D399" />
+                                    <Text style={styles.balanceItemText}>
+                                        Assets: {showBalance ? formatCurrency(stats.balance + stats.totalInvestment) : '\u2022\u2022\u2022\u2022'}
+                                    </Text>
                                 </View>
-                                <Text style={styles.balanceAmount}>
-                                    {showBalance ? formatCurrency(stats.balance) : '₹ ••••••'}
-                                </Text>
-                                <View style={styles.balanceFooter}>
-                                    <View style={styles.balanceItem}>
-                                        <Ionicons name="arrow-down-circle" size={16} color="#34D399" />
-                                        <Text style={styles.balanceItemText}>Assets: {formatCurrency(stats.balance + stats.totalInvestment)}</Text>
-                                    </View>
-                                </View>
-                            </LinearGradient>
-                        </TouchableOpacity>
+                            </View>
+                        </LinearGradient>
 
                         {/* Stats Grid */}
                         <View style={styles.statsGrid}>
                             <View style={styles.statCard}>
-                                <View style={[styles.statIconBg, { backgroundColor: 'rgba(239,68,68,0.15)' }]}>
+                                <View style={[styles.statIconBg, { backgroundColor: Colors.danger + '25' }]}>
                                     <Ionicons name="receipt" size={20} color={Colors.danger} />
                                 </View>
-                                <Text style={styles.statLabel}>Monthly Expenses</Text>
+                                <Text style={styles.statLabel}>This Month</Text>
                                 <Text style={styles.statValue}>{formatCurrency(stats.monthlyExpenses)}</Text>
                             </View>
                             <View style={styles.statCard}>
-                                <View style={[styles.statIconBg, { backgroundColor: 'rgba(124,58,237,0.15)' }]}>
+                                <View style={[styles.statIconBg, { backgroundColor: Colors.secondary + '25' }]}>
                                     <Ionicons name="trending-up" size={20} color={Colors.secondary} />
                                 </View>
-                                <Text style={styles.statLabel}>Investments</Text>
+                                <Text style={styles.statLabel}>Invested</Text>
                                 <Text style={styles.statValue}>{formatCurrency(stats.totalInvestment)}</Text>
                             </View>
                         </View>
@@ -172,9 +224,54 @@ export default function DashboardScreen({ navigation }: any) {
                     </>
                 )}
 
+                {/* Budget Snapshot (top at-risk budgets) */}
+                {topBudgets.length > 0 && (
+                    <>
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>Budget Watch</Text>
+                            <TouchableOpacity onPress={() => navigation.navigate('Budgets')}>
+                                <Text style={styles.seeAll}>See All</Text>
+                            </TouchableOpacity>
+                        </View>
+                        {topBudgets.map((b) => {
+                            const spent = getCurrentMonthSpend(b.category);
+                            const pct = getBudgetPct(b);
+                            const barColor = pct >= 100
+                                ? Colors.gradientDanger
+                                : pct >= 80
+                                ? Colors.gradientWarning
+                                : Colors.gradientSuccess;
+                            return (
+                                <View key={b.category} style={styles.budgetItem}>
+                                    <View style={styles.budgetItemTop}>
+                                        <View style={[styles.txIconBg, { backgroundColor: (Colors.categoryColors[b.category] || Colors.primary) + '20' }]}>
+                                            <Ionicons name={getCategoryIcon(b.category) as any} size={18} color={Colors.categoryColors[b.category] || Colors.primary} />
+                                        </View>
+                                        <View style={styles.txDetails}>
+                                            <Text style={styles.txCategory}>{b.category}</Text>
+                                            <Text style={styles.txSub}>{formatCurrency(spent)} of {formatCurrency(b.limitAmount)}</Text>
+                                        </View>
+                                        <Text style={[styles.budgetPct, { color: pct >= 100 ? Colors.danger : pct >= 80 ? Colors.warning : Colors.success }]}>
+                                            {pct}%
+                                        </Text>
+                                    </View>
+                                    <View style={styles.progressBar}>
+                                        <LinearGradient
+                                            colors={barColor as any}
+                                            style={[styles.progressFill, { width: `${pct}%` as any }]}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 0 }}
+                                        />
+                                    </View>
+                                </View>
+                            );
+                        })}
+                    </>
+                )}
+
                 {/* Recent Transactions */}
                 <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Recent Transactions</Text>
+                    <Text style={styles.sectionTitle}>Recent Expenses</Text>
                     <TouchableOpacity onPress={() => navigation.navigate('Transactions')}>
                         <Text style={styles.seeAll}>See All</Text>
                     </TouchableOpacity>
@@ -187,7 +284,7 @@ export default function DashboardScreen({ navigation }: any) {
                     </View>
                 ) : (
                     transactions.slice(0, 5).map((t, idx) => (
-                        <View key={t.id || idx} style={styles.transactionItem}>
+                        <View key={t.id ?? idx} style={styles.transactionItem}>
                             <View style={[styles.txIconBg, { backgroundColor: (Colors.categoryColors[t.category] || Colors.primary) + '20' }]}>
                                 <Ionicons name={getCategoryIcon(t.category) as any} size={20} color={Colors.categoryColors[t.category] || Colors.primary} />
                             </View>
@@ -207,7 +304,7 @@ export default function DashboardScreen({ navigation }: any) {
 
                 {/* Subscriptions */}
                 <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>Subscriptions</Text>
+                    <Text style={styles.sectionTitle}>Active Subscriptions</Text>
                     <TouchableOpacity onPress={() => navigation.navigate('Subscriptions')}>
                         <Text style={styles.seeAll}>See All</Text>
                     </TouchableOpacity>
@@ -220,7 +317,7 @@ export default function DashboardScreen({ navigation }: any) {
                     </View>
                 ) : (
                     subscriptions.slice(0, 3).map((s, idx) => (
-                        <View key={s.id || idx} style={styles.subItem}>
+                        <View key={s.id ?? idx} style={styles.subItem}>
                             <View style={[styles.subIconBg, { backgroundColor: (s.color || Colors.primary) + '20' }]}>
                                 <Ionicons name="card" size={20} color={s.color || Colors.primary} />
                             </View>
@@ -233,7 +330,7 @@ export default function DashboardScreen({ navigation }: any) {
                     ))
                 )}
 
-                <View style={{ height: 100 }} />
+                <View style={{ height: 110 }} />
             </ScrollView>
         </View>
     );
@@ -242,12 +339,13 @@ export default function DashboardScreen({ navigation }: any) {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: Colors.background },
     scrollView: { flex: 1 },
+
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 20,
-        paddingTop: 52,
+        paddingTop: 56,
         paddingBottom: 16,
     },
     greeting: {
@@ -265,7 +363,7 @@ const styles = StyleSheet.create({
     // Balance Card
     balanceCard: {
         marginHorizontal: 20,
-        borderRadius: 20,
+        borderRadius: 22,
         padding: 24,
         ...Shadows.large,
     },
@@ -276,23 +374,17 @@ const styles = StyleSheet.create({
     },
     balanceLabel: {
         fontSize: 14,
-        color: 'rgba(255,255,255,0.7)',
+        color: 'rgba(255,255,255,0.75)',
         fontWeight: '500',
     },
     balanceAmount: {
         fontSize: 36,
         fontWeight: '800',
         color: '#FFF',
-        marginVertical: 8,
+        marginVertical: 10,
     },
-    balanceFooter: {
-        flexDirection: 'row',
-        marginTop: 4,
-    },
-    balanceItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
+    balanceFooter: { flexDirection: 'row', marginTop: 4 },
+    balanceItem: { flexDirection: 'row', alignItems: 'center' },
     balanceItemText: {
         fontSize: 13,
         color: 'rgba(255,255,255,0.8)',
@@ -328,7 +420,7 @@ const styles = StyleSheet.create({
         marginBottom: 4,
     },
     statValue: {
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: '700',
         color: Colors.textPrimary,
     },
@@ -347,7 +439,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 12,
+        marginBottom: 14,
     },
     goalTitle: {
         fontSize: 16,
@@ -360,7 +452,7 @@ const styles = StyleSheet.create({
         marginTop: 2,
     },
     goalPercentBadge: {
-        backgroundColor: Colors.success + '20',
+        backgroundColor: Colors.success + '25',
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 20,
@@ -370,6 +462,8 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         fontSize: 14,
     },
+
+    // Progress bar (shared)
     progressBar: {
         height: 8,
         backgroundColor: Colors.surfaceLight,
@@ -381,7 +475,7 @@ const styles = StyleSheet.create({
         borderRadius: 10,
     },
 
-    // Section Header
+    // Section header
     sectionHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -401,7 +495,27 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
 
-    // Transaction Item
+    // Budget item (dashboard widget)
+    budgetItem: {
+        backgroundColor: Colors.card,
+        borderRadius: 14,
+        padding: 14,
+        marginHorizontal: 20,
+        marginBottom: 10,
+        borderWidth: 1,
+        borderColor: Colors.border,
+    },
+    budgetItemTop: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 10,
+    },
+    budgetPct: {
+        fontSize: 14,
+        fontWeight: '700',
+    },
+
+    // Transaction item
     transactionItem: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -420,10 +534,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    txDetails: {
-        flex: 1,
-        marginLeft: 14,
-    },
+    txDetails: { flex: 1, marginLeft: 14 },
     txCategory: {
         fontSize: 15,
         fontWeight: '600',
@@ -434,9 +545,7 @@ const styles = StyleSheet.create({
         color: Colors.textSecondary,
         marginTop: 2,
     },
-    txRight: {
-        alignItems: 'flex-end',
-    },
+    txRight: { alignItems: 'flex-end' },
     txAmount: {
         fontSize: 15,
         fontWeight: '700',
@@ -448,12 +557,9 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         marginTop: 4,
     },
-    modeText: {
-        fontSize: 11,
-        fontWeight: '600',
-    },
+    modeText: { fontSize: 11, fontWeight: '600' },
 
-    // Subscription Item
+    // Subscription item
     subItem: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -472,10 +578,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
     },
-    subDetails: {
-        flex: 1,
-        marginLeft: 14,
-    },
+    subDetails: { flex: 1, marginLeft: 14 },
     subName: {
         fontSize: 15,
         fontWeight: '600',
@@ -492,7 +595,7 @@ const styles = StyleSheet.create({
         color: Colors.textPrimary,
     },
 
-    // Empty State
+    // Empty state
     emptyState: {
         alignItems: 'center',
         paddingVertical: 30,

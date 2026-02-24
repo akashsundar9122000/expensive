@@ -272,9 +272,13 @@ export class InvestmentsComponent implements OnInit {
 
   saveInvestment() {
     if (this.newInvestment.name && this.newInvestment.amount > 0) {
-      this.expenseService.addInvestment({ ...this.newInvestment });
-      this.showModal = false;
-      this.newInvestment = { type: 'Mutual Fund', name: '', amount: 0, returnPct: undefined };
+      this.expenseService.addInvestment({ ...this.newInvestment }).subscribe({
+        next: () => {
+          this.showModal = false;
+          this.newInvestment = { type: 'Mutual Fund', name: '', amount: 0, returnPct: undefined };
+        },
+        error: (err) => { console.error('Failed to save investment:', err); }
+      });
     }
   }
 

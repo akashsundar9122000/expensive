@@ -22,7 +22,7 @@ public class ApplicationConfig {
     @Bean
     public UserDetailsService userDetailsService() {
         return username -> {
-            com.expensify.backend.model.User user = userRepository.findByEmail(username)
+            com.expensify.backend.model.User user = userRepository.findByEmailIgnoreCase(username == null ? null : username.trim())
                     .orElseThrow(() -> new UsernameNotFoundException("User not found"));
             return new org.springframework.security.core.userdetails.User(
                     user.getEmail(),

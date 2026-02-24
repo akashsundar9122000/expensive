@@ -128,14 +128,18 @@ import { FormsModule } from '@angular/forms';
                 <button class="close-btn" (click)="showAddBankModal = false"><i class="ph ph-x"></i></button>
             </div>
             <div class="modal-body">
-                <form class="modal-form" (submit)="onAddBank(newBankName.value); $event.preventDefault()">
+                <form class="modal-form" (submit)="onAddBank(newBankName.value, +newBankBalance.value); $event.preventDefault()">
                     <div class="form-group">
                         <label>Bank Name</label>
                         <input type="text" #newBankName placeholder="e.g. HDFC Bank, ICICI Bank">
                     </div>
+                  <div class="form-group">
+                    <label>Opening Balance (₹)</label>
+                    <input type="number" #newBankBalance placeholder="e.g. 25000" step="0.01">
+                  </div>
                     <div class="modal-actions">
-                        <button type="button" class="btn outline" (click)="showAddBankModal = false">Cancel</button>
-                        <button type="submit" class="btn primary">Add Bank</button>
+                        <button type="button" class="outline-btn" (click)="showAddBankModal = false">Cancel</button>
+                        <button type="submit" class="primary-btn">Add Bank</button>
                     </div>
                 </form>
             </div>
@@ -244,9 +248,10 @@ export class CardsComponent implements OnInit {
     this.stats$ = this.expenseService.getStats();
   }
 
-  onAddBank(name: string) {
+  onAddBank(name: string, balance?: number) {
     if (!name) return;
-    this.expenseService.addBank(name);
+    const normalizedBalance = Number.isFinite(balance as number) ? Number(balance) : 0;
+    this.expenseService.addBank(name, normalizedBalance);
     this.showAddBankModal = false;
   }
 }

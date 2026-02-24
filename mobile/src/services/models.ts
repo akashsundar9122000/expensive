@@ -1,3 +1,5 @@
+// models.ts — shared data types for the Expensify mobile app
+
 export interface User {
     name: string;
     email: string;
@@ -31,6 +33,13 @@ export interface Investment {
     returnPct?: number;
 }
 
+export interface Budget {
+    category: string;
+    limitAmount: number;
+    // spent is computed client-side from transactions for the current month
+    spent?: number;
+}
+
 export interface DashboardStats {
     balance: number;
     monthlyExpenses: number;
@@ -39,7 +48,7 @@ export interface DashboardStats {
     goalName: string;
     goalRequired: number;
     goalCollected: number;
-    bankBalances: { [key: string]: number };
+    bankBalances: Record<string, number>;
 }
 
 export interface AuthResponse {

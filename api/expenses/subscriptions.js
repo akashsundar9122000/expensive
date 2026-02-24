@@ -6,7 +6,12 @@ module.exports = async (req, res) => {
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     const email = getEmailFromRequest(req);
-    if (!email) return res.status(401).json({ error: 'Unauthorized' });
+    console.log('Auth header:', req.headers.authorization);
+    console.log('Method:', req.method);
+    if (!email) {
+        console.log('Unauthorized - email not found');
+        return res.status(401).json({ error: 'Unauthorized - Invalid or missing token' });
+    }
 
     const userResult = await query('SELECT id FROM users WHERE email = $1', [email]);
     if (userResult.rows.length === 0) return res.status(401).json({ error: 'User not found' });
@@ -30,16 +35,40 @@ module.exports = async (req, res) => {
             return res.status(200).json(result.rows[0]);
         }
 
-        if (req.method === 'DELETE') {
-            const { id } = req.query;
+        if (req.method === 'PUT') {
+            // Vercel routes /subscriptions/123 to /subscriptions.js?id=123
+            let id = req.query.id;
+            
+            const { name, amount, icon, color, date } = req.body;
+            console.log('PUT Request - ID:', id, 'Query:', req.query, 'Name:', name, 'Amount:', amount, 'Date:', date);
+            
             if (!id) return res.status(400).json({ error: 'Missing ID' });
-            await query('DELETE FROM subscriptions WHERE id = $1 AND user_id = $2', [id, userId]);
+            const subId = parseInt(id, 10);
+            if (isNaN(subId)) return res.status(400).json({ error: 'Invalid ID format' });
+            
+            const result = await query(
+                'UPDATE subscriptions SET name = $1, amount = $2, icon = $3, color = $4, date = $5 WHERE id = $6 AND user_id = $7 RETURNING id, name, amount, icon, color, date',
+                [name, amount, icon, color, date, subId, userId]
+            );
+            console.log('Update result rows:', result.rows.length);
+            if (result.rows.length === 0) return res.status(404).json({ error: 'Subscription not found' });
+            return res.status(200).json(result.rows[0]);
+        }
+
+        if (req.method === 'DELETE') {
+            // Vercel routes /subscriptions/123 to /subscriptions.js?id=123
+            let id = req.query.id;
+            
+            if (!id) return res.status(400).json({ error: 'Missing ID' });
+            const subId = parseInt(id, 10);
+            if (isNaN(subId)) return res.status(400).json({ error: 'Invalid ID format' });
+            await query('DELETE FROM subscriptions WHERE id = $1 AND user_id = $2', [subId, userId]);
             return res.status(200).json({ message: 'Deleted' });
         }
 
         return res.status(405).json({ error: 'Method not allowed' });
     } catch (err) {
         console.error('Subscriptions error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        return res.status(500).json({ error: 'Internal server error', details: err.message });
     }
 };

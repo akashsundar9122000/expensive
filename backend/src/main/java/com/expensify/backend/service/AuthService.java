@@ -9,6 +9,7 @@ import com.expensify.backend.repository.UserPreferenceRepository;
 import com.expensify.backend.repository.UserRepository;
 import com.expensify.backend.security.JwtService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -27,9 +28,10 @@ public class AuthService {
         private final AuthenticationManager authenticationManager;
 
         public AuthenticationResponse register(RegisterRequest request) {
+                String email = normalizeEmail(request.getEmail());
                 var user = User.builder()
-                                .name(request.getName())
-                                .email(request.getEmail())
+                                .name(request.getName() != null ? request.getName().trim() : null)
+                                .email(email)
                                 .password(passwordEncoder.encode(request.getPassword()))
                                 .build();
                 userRepository.save(user);
@@ -45,20 +47,32 @@ public class AuthService {
                 userPreferenceRepository.save(preferences);
 
                 var jwtToken = jwtService.generateToken(new org.springframework.security.core.userdetails.User(
-                                user.getEmail(), user.getPassword(), new ArrayList<>()));
+                                email, user.getPassword(), new ArrayList<>()));
                 return AuthenticationResponse.builder()
                                 .token(jwtToken)
                                 .name(user.getName())
-                                .email(user.getEmail())
+                                .email(email)
                                 .build();
         }
 
         public AuthenticationResponse authenticate(AuthenticationRequest request) {
-                authenticationManager.authenticate(
-                                new UsernamePasswordAuthenticationToken(
-                                                request.getEmail(),
-                                                request.getPassword()));
-                var user = userRepository.findByEmail(request.getEmail())
+                String email = normalizeEmail(request.getEmail());
+                String rawPassword = request.getPassword();
+
+                try {
+                        authenticationManager.authenticate(
+                                        new UsernamePasswordAuthenticationToken(email, rawPassword));
+                } catch (BadCredentialsException ex) {
+                        var legacyUser = userRepository.findByEmailIgnoreCase(email).orElseThrow(() -> ex);
+                        if (!isBcryptHash(legacyUser.getPassword()) && legacyUser.getPassword().equals(rawPassword)) {
+                                legacyUser.setPassword(passwordEncoder.encode(rawPassword));
+                                userRepository.save(legacyUser);
+                        } else {
+                                throw ex;
+                        }
+                }
+
+                var user = userRepository.findByEmailIgnoreCase(email)
                                 .orElseThrow();
                 var jwtToken = jwtService.generateToken(new org.springframework.security.core.userdetails.User(
                                 user.getEmail(), user.getPassword(), new ArrayList<>()));
@@ -68,6 +82,20 @@ public class AuthService {
                                 .email(user.getEmail())
                                 .avatarUrl(user.getAvatarUrl())
                                 .build();
+        }
+
+        private String normalizeEmail(String email) {
+                if (email == null) {
+                        return null;
+                }
+                return email.trim().toLowerCase();
+        }
+
+        private boolean isBcryptHash(String password) {
+                if (password == null) {
+                        return false;
+                }
+                return password.startsWith("$2a$") || password.startsWith("$2b$") || password.startsWith("$2y$");
         }
 
         public void updateProfile(String email, String name, String avatarUrl) {

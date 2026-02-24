@@ -28,20 +28,23 @@ export default function AddExpenseScreen({ navigation }: any) {
 
     const loadBanks = async () => {
         try {
-            const user = await authService.getCurrentUser();
-            if (user?.bankAccounts?.length) {
-                setBankAccounts(user.bankAccounts);
-                setSelectedBank(user.bankAccounts[0]);
-            }
-            // Also try API
+            // Fetch live bank list from API first; it is the source of truth
             const banks = await expenseService.getBanks();
             if (banks?.length) {
-                const bankNames = banks.map((b: any) => b.name);
+                const bankNames = banks.map((b: any) => b.name ?? String(b.id));
                 setBankAccounts(bankNames);
-                if (!selectedBank) setSelectedBank(bankNames[0]);
+                // Always set a default selection when list is freshly loaded
+                setSelectedBank(bankNames[0]);
+            } else {
+                // Fall back to the cached user profile (may be stale but better than nothing)
+                const user = await authService.getCurrentUser();
+                if (user?.bankAccounts?.length) {
+                    setBankAccounts(user.bankAccounts);
+                    setSelectedBank(user.bankAccounts[0]);
+                }
             }
-        } catch (err) {
-            console.log('Error loading banks:', err);
+        } catch {
+            // Non-critical: bank list unavailable, user can proceed without account selection
         }
     };
 

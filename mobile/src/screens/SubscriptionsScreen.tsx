@@ -17,13 +17,15 @@ export default function SubscriptionsScreen() {
     const [amount, setAmount] = useState('');
     const [date, setDate] = useState('');
     const [loading, setLoading] = useState(false);
+    const [isEditMode, setIsEditMode] = useState(false);
+    const [editingId, setEditingId] = useState<number | null>(null);
 
     const loadData = useCallback(async () => {
         try {
             const data = await expenseService.getSubscriptions();
-            setSubscriptions(data);
-        } catch (err) {
-            console.error('Error loading subscriptions:', err);
+            setSubscriptions(Array.isArray(data) ? data : []);
+        } catch {
+            // Network error — stale data remains displayed
         }
     }, []);
 
@@ -35,25 +37,63 @@ export default function SubscriptionsScreen() {
         setRefreshing(false);
     };
 
+    const resetForm = () => {
+        setName('');
+        setAmount('');
+        setDate('');
+        setIsEditMode(false);
+        setEditingId(null);
+    };
+
+    const openNewModal = () => {
+        resetForm();
+        setShowModal(true);
+    };
+
     const handleAdd = async () => {
         if (!name || !amount || !date) {
             Alert.alert('Error', 'Please fill in all fields');
             return;
         }
+        
+        const dateNum = parseInt(date, 10);
+        if (isNaN(dateNum) || dateNum < 1 || dateNum > 31) {
+            Alert.alert('Error', 'Billing date must be between 1 and 31');
+            return;
+        }
+        
         setLoading(true);
         try {
-            await expenseService.addSubscription({
-                name, amount: parseFloat(amount), date,
-                icon: 'ph-credit-card', color: '#4A6CF7',
-            });
+            const payload = {
+                name,
+                amount: parseFloat(amount),
+                date,
+                icon: 'ph-credit-card',
+                color: '#4A6CF7'
+            };
+            
+            if (isEditMode && editingId) {
+                await expenseService.editSubscription(editingId, payload);
+            } else {
+                await expenseService.addSubscription(payload);
+            }
             setShowModal(false);
-            setName(''); setAmount(''); setDate('');
+            resetForm();
             await loadData();
         } catch (err) {
-            Alert.alert('Error', 'Failed to add subscription');
+            Alert.alert('Error', isEditMode ? 'Failed to update subscription' : 'Failed to add subscription');
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleEdit = (sub: Subscription) => {
+        setName(sub.name);
+        setAmount(sub.amount.toString());
+        setDate(sub.date || '');
+        setIsEditMode(true);
+        setEditingId(sub.id);
+        setShowModal(true);
     };
 
     const handleDelete = (id: number) => {
@@ -83,12 +123,17 @@ export default function SubscriptionsScreen() {
             </View>
             <View style={styles.details}>
                 <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemDate}>{item.date}</Text>
+                <Text style={styles.itemDate}>Deducts on: {item.date || 'Not set'}</Text>
             </View>
             <Text style={styles.itemAmount}>{formatCurrency(item.amount)}</Text>
-            <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id)}>
-                <Ionicons name="close-circle" size={22} color={Colors.danger} />
-            </TouchableOpacity>
+            <View style={styles.actionButtons}>
+                <TouchableOpacity style={styles.editBtn} onPress={() => handleEdit(item)}>
+                    <Ionicons name="pencil" size={18} color={Colors.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id)}>
+                    <Ionicons name="close-circle" size={22} color={Colors.danger} />
+                </TouchableOpacity>
+            </View>
         </View>
     );
 
@@ -98,7 +143,7 @@ export default function SubscriptionsScreen() {
 
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Subscriptions</Text>
-                <TouchableOpacity style={styles.addBtn} onPress={() => setShowModal(true)}>
+                <TouchableOpacity style={styles.addBtn} onPress={openNewModal}>
                     <Ionicons name="add" size={24} color="#FFF" />
                 </TouchableOpacity>
             </View>
@@ -132,13 +177,13 @@ export default function SubscriptionsScreen() {
                 }
             />
 
-            {/* Add Modal */}
+            {/* Add/Edit Modal */}
             <Modal visible={showModal} transparent animationType="slide">
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Add Subscription</Text>
-                            <TouchableOpacity onPress={() => setShowModal(false)}>
+                            <Text style={styles.modalTitle}>{isEditMode ? 'Edit Subscription' : 'Add Subscription'}</Text>
+                            <TouchableOpacity onPress={() => { setShowModal(false); resetForm(); }}>
                                 <Ionicons name="close" size={24} color={Colors.textPrimary} />
                             </TouchableOpacity>
                         </View>
@@ -153,12 +198,12 @@ export default function SubscriptionsScreen() {
                         </View>
                         <View style={styles.inputContainer}>
                             <Ionicons name="calendar-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
-                            <TextInput style={styles.input} placeholder="Date (e.g. 15th of every month)" placeholderTextColor={Colors.textMuted} value={date} onChangeText={setDate} />
+                            <TextInput style={styles.input} placeholder="Billing date (day of month)" placeholderTextColor={Colors.textMuted} value={date} onChangeText={setDate} keyboardType="number-pad" />
                         </View>
 
                         <TouchableOpacity style={styles.submitBtn} onPress={handleAdd} disabled={loading} activeOpacity={0.8}>
                             <LinearGradient colors={Colors.gradientPurple as any} style={styles.submitGradient}>
-                                <Text style={styles.submitText}>{loading ? 'Adding...' : 'Add Subscription'}</Text>
+                                <Text style={styles.submitText}>{loading ? (isEditMode ? 'Updating...' : 'Adding...') : (isEditMode ? 'Update Subscription' : 'Add Subscription')}</Text>
                             </LinearGradient>
                         </TouchableOpacity>
                     </View>
@@ -196,6 +241,8 @@ const styles = StyleSheet.create({
     itemName: { fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
     itemDate: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
     itemAmount: { fontSize: 15, fontWeight: '700', color: Colors.textPrimary, marginRight: 10 },
+    actionButtons: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    editBtn: { padding: 6 },
     deleteBtn: { padding: 4 },
     emptyState: { alignItems: 'center', paddingTop: 80 },
     emptyTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary, marginTop: 16 },

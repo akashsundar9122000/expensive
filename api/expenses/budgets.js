@@ -13,19 +13,8 @@ module.exports = async (req, res) => {
     const userId = userResult.rows[0].id;
 
     try {
-        // Simple check/create for budgets table if it doesn't exist (primitive migration)
-        await query(`
-            CREATE TABLE IF NOT EXISTS budgets (
-                id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(id),
-                category VARCHAR(255) NOT NULL,
-                limit_amount DECIMAL(12,2) NOT NULL,
-                UNIQUE(user_id, category)
-            )
-        `);
-
         if (req.method === 'GET') {
-            const result = await query('SELECT category, limit_amount as limitAmount FROM budgets WHERE user_id = $1', [userId]);
+            const result = await query('SELECT category, limit_amount as "limitAmount" FROM budgets WHERE user_id = $1', [userId]);
             return res.status(200).json(result.rows);
         }
 
@@ -54,6 +43,6 @@ module.exports = async (req, res) => {
         return res.status(405).json({ error: 'Method not allowed' });
     } catch (err) {
         console.error('Budgets error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        return res.status(500).json({ error: 'Internal server error' });
     }
 };

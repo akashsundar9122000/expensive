@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, Observable, forkJoin, tap, take, catchError, of } from 'rxjs';
-import { Transaction, Subscription, Investment, DashboardStats, User, Budget } from './models';
+import { BehaviorSubject, Observable, forkJoin, tap, take, catchError, of, throwError } from 'rxjs';
+import { Transaction, Subscription, Investment, DashboardStats, User, Budget, Bank } from './models';
 import { AuthService } from './auth.service';
 
 @Injectable({
@@ -13,6 +13,7 @@ export class ExpenseService {
     private subscriptions = new BehaviorSubject<Subscription[]>([]);
     private investments = new BehaviorSubject<Investment[]>([]);
     private budgets = new BehaviorSubject<Budget[]>([]);
+    private banks = new BehaviorSubject<Bank[]>([]);
     private user = new BehaviorSubject<User | null>(null);
     private apiUrl = '/api/expenses';
 
@@ -46,20 +47,22 @@ export class ExpenseService {
             this.http.get<Subscription[]>(`${this.apiUrl}/subscriptions`).pipe(catchError(() => of([]))),
             this.http.get<Investment[]>(`${this.apiUrl}/investments`).pipe(catchError(() => of([]))),
             this.http.get<Budget[]>(`${this.apiUrl}/budgets`).pipe(catchError(() => of([]))),
-            this.http.get<DashboardStats>(`${this.apiUrl}/stats`).pipe(catchError(() => of(this.getDefaultStats())))
-        ]).subscribe(([u, t, s, i, b, statsData]) => {
+            this.http.get<DashboardStats>(`${this.apiUrl}/stats`).pipe(catchError(() => of(this.getDefaultStats()))),
+            this.http.get<Bank[]>(`${this.apiUrl}/banks`).pipe(catchError(() => of([])))
+        ]).subscribe(([u, t, s, i, b, statsData, banksData]) => {
             const user = u as User | null;
-            this.user.next(user);
+            const bankList = banksData as Bank[];
             this.transactions.next(t as Transaction[]);
             this.subscriptions.next(s as Subscription[]);
             this.investments.next(i as Investment[]);
             this.budgets.next(b as Budget[]);
             this.stats.next(statsData as DashboardStats);
-
-            if (user && (statsData as DashboardStats).bankBalances) {
-                const banks = Object.keys((statsData as DashboardStats).bankBalances);
-                this.authService.updateUserInfo({ bankAccounts: banks });
-                this.user.next({ ...user, bankAccounts: banks });
+            this.banks.next(bankList);
+            // Keep user.bankAccounts in sync so dashboard/all-expenses dropdowns stay populated
+            if (user) {
+                this.user.next({ ...user, bankAccounts: bankList.map(bk => bk.name) });
+            } else {
+                this.user.next(user);
             }
         });
     }
@@ -70,6 +73,7 @@ export class ExpenseService {
         this.subscriptions.next([]);
         this.investments.next([]);
         this.budgets.next([]);
+        this.banks.next([]);
         this.user.next(null);
     }
 
@@ -79,20 +83,72 @@ export class ExpenseService {
     getSubscriptions(): Observable<Subscription[]> { return this.subscriptions.asObservable(); }
     getInvestments(): Observable<Investment[]> { return this.investments.asObservable(); }
     getBudgets(): Observable<Budget[]> { return this.budgets.asObservable(); }
+    getBanks(): Observable<Bank[]> { return this.banks.asObservable(); }
 
-    addBank(bankName: string) {
-        this.http.post<any>(`${this.apiUrl}/banks?name=${bankName}`, {}).subscribe(() => {
-            setTimeout(() => this.refreshAllData(), 200);
+    addBank(bankName: string, balance?: number | null) {
+        const encodedName = encodeURIComponent(bankName);
+        const balanceParam = balance != null && !isNaN(balance) ? `&balance=${encodeURIComponent(balance)}` : '';
+        this.http.post<any>(`${this.apiUrl}/banks?name=${encodedName}${balanceParam}`, {}).subscribe({
+            next: () => { this.refreshAllData(); },
+            error: (err) => { console.error('Failed to add bank:', err); }
+        });
+    }
+
+    updateBank(id: number, name: string, balance?: number | null) {
+        const encodedName = encodeURIComponent(name);
+        const balanceParam = balance != null && !isNaN(balance) ? `&balance=${encodeURIComponent(balance)}` : '';
+        this.http.put<any>(`${this.apiUrl}/banks?id=${id}&name=${encodedName}${balanceParam}`, {}).subscribe({
+            next: () => { this.refreshAllData(); },
+            error: (err) => { console.error('Failed to update bank:', err); }
+        });
+    }
+
+    deleteBank(id: number) {
+        this.http.delete<any>(`${this.apiUrl}/banks?id=${id}`).subscribe({
+            next: () => { this.refreshAllData(); },
+            error: (err) => { console.error('Failed to delete bank:', err); }
         });
     }
 
     addTransaction(transaction: Omit<Transaction, 'id'>, bankName?: string) {
-        this.http.post<Transaction>(`${this.apiUrl}/transactions?bankName=${bankName || ''}`, transaction)
-            .subscribe(() => { this.refreshAllData(); });
+        const bank = encodeURIComponent(bankName || 'SBI');
+        this.http.post<Transaction>(`${this.apiUrl}/transactions?bankName=${bank}`, transaction)
+            .subscribe({
+                next: (newTx) => {
+                    // Optimistic update: immediately prepend to local list so UI reflects instantly
+                    const current = this.transactions.getValue();
+                    this.transactions.next([newTx, ...current]);
+                    // Full refresh in background for balance/stats sync
+                    this.refreshAllData();
+                },
+                error: (err) => { console.error('Failed to add transaction:', err); }
+            });
+    }
+
+    updateTransaction(id: number, transaction: Omit<Transaction, 'id'>) {
+        this.http.put<Transaction>(`${this.apiUrl}/transactions/${id}`, transaction)
+            .subscribe({
+                next: (updatedTx) => {
+                    // Update local list
+                    const current = this.transactions.getValue();
+                    const index = current.findIndex(t => t.id === id);
+                    if (index !== -1) {
+                        const updated = [...current];
+                        updated[index] = updatedTx;
+                        this.transactions.next(updated);
+                    }
+                    // Full refresh in background for balance/stats sync
+                    this.refreshAllData();
+                },
+                error: (err) => { console.error('Failed to update transaction:', err); }
+            });
     }
 
     deleteTransaction(id: number) {
-        this.http.delete(`${this.apiUrl}/transactions/${id}`).subscribe(() => { this.refreshAllData(); });
+        this.http.delete(`${this.apiUrl}/transactions/${id}`).subscribe({
+            next: () => { this.refreshAllData(); },
+            error: (err) => { console.error('Failed to delete transaction:', err); }
+        });
     }
 
     addSubscription(sub: Omit<Subscription, 'id'>): Observable<Subscription> {
@@ -104,31 +160,63 @@ export class ExpenseService {
         );
     }
 
-    deleteSubscription(id: number) {
-        this.http.delete(`${this.apiUrl}/subscriptions/${id}`).subscribe(() => { this.refreshAllData(); });
+    editSubscription(id: number, sub: Omit<Subscription, 'id'>): Observable<Subscription> {
+        console.log('Calling editSubscription with ID:', id, 'Payload:', sub);
+        return this.http.put<Subscription>(`${this.apiUrl}/subscriptions/${id}`, sub).pipe(
+            tap((response) => {
+                console.log('EditSubscription response:', response);
+                // Ensure UI updates by triggering a fresh load
+                setTimeout(() => this.refreshAllData(), 100);
+            }),
+            catchError((error) => {
+                console.error('EditSubscription error:', error);
+                return throwError(() => error);
+            })
+        );
     }
 
-    addInvestment(investment: Omit<Investment, 'id'>) {
-        this.http.post<Investment>(`${this.apiUrl}/investments`, investment).subscribe(() => { this.refreshAllData(); });
+    deleteSubscription(id: number) {
+        this.http.delete(`${this.apiUrl}/subscriptions/${id}`).subscribe({
+            next: () => { this.refreshAllData(); },
+            error: (err) => { console.error('Failed to delete subscription:', err); }
+        });
+    }
+
+    addInvestment(investment: Omit<Investment, 'id'>): Observable<Investment> {
+        return this.http.post<Investment>(`${this.apiUrl}/investments`, investment).pipe(
+            tap(() => { this.refreshAllData(); })
+        );
     }
 
     deleteInvestment(id: number) {
-        this.http.delete(`${this.apiUrl}/investments/${id}`).subscribe(() => { this.refreshAllData(); });
+        this.http.delete(`${this.apiUrl}/investments/${id}`).subscribe({
+            next: () => { this.refreshAllData(); },
+            error: (err) => { console.error('Failed to delete investment:', err); }
+        });
     }
 
     fundGoal(amount: number) {
         this.http.put(`${this.apiUrl}/preferences`, {
             goalCollectedIncrement: amount
-        }).subscribe(() => this.refreshAllData());
+        }).subscribe({
+            next: () => this.refreshAllData(),
+            error: (err) => { console.error('Failed to fund goal:', err); }
+        });
     }
 
     updateBalance(bankName: string, amount: number) { this.refreshAllData(); }
 
     saveBudget(category: string, limitAmount: number) {
-        this.http.post(`${this.apiUrl}/budgets`, { category, limitAmount }).subscribe(() => this.refreshAllData());
+        this.http.post(`${this.apiUrl}/budgets`, { category, limitAmount }).subscribe({
+            next: () => this.refreshAllData(),
+            error: (err) => { console.error('Failed to save budget:', err); }
+        });
     }
 
     deleteBudget(category: string) {
-        this.http.delete(`${this.apiUrl}/budgets?category=${category}`).subscribe(() => this.refreshAllData());
+        this.http.delete(`${this.apiUrl}/budgets?category=${encodeURIComponent(category)}`).subscribe({
+            next: () => this.refreshAllData(),
+            error: (err) => { console.error('Failed to delete budget:', err); }
+        });
     }
 }

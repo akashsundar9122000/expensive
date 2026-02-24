@@ -1,5 +1,7 @@
 package com.expensify.backend.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -14,10 +16,12 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class UserPreference {
     @Id
     private UUID userId;
 
+    @JsonIgnore
     @OneToOne
     @MapsId
     @JoinColumn(name = "user_id")
@@ -28,4 +32,7 @@ public class UserPreference {
     private BigDecimal goalCollected;
     private BigDecimal totalInvestment;
     private BigDecimal investAmount;
+
+    @Transient
+    private BigDecimal goalCollectedIncrement;
 }

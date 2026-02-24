@@ -27,11 +27,16 @@ export class AuthService {
     }
 
     register(user: any): Observable<any> {
-        return this.http.post(`${this.apiUrl}/register`, user);
+        const normalizedUser = {
+            ...user,
+            email: (user?.email || '').trim().toLowerCase()
+        };
+        return this.http.post(`${this.apiUrl}/register`, normalizedUser);
     }
 
     login(email: string, password: string): Observable<boolean> {
-        return this.http.post<any>(`${this.apiUrl}/login`, { email, password })
+        const normalizedEmail = (email || '').trim().toLowerCase();
+        return this.http.post<any>(`${this.apiUrl}/login`, { email: normalizedEmail, password })
             .pipe(
                 map(response => {
                     if (response && response.token) {

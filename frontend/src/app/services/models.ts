@@ -6,6 +6,12 @@ export interface User {
     bankAccounts: string[];
 }
 
+export interface Bank {
+    id: number;
+    name: string;
+    balance: number;
+}
+
 export interface Transaction {
     id: number;
     amount: number;
@@ -21,7 +27,7 @@ export interface Subscription {
     name: string;
     date: string;
     amount: number;
-    icon: string;
+    icon?: string | null;
     color: string;
 }
 
@@ -48,4 +54,17 @@ export interface DashboardStats {
     goalRequired: number;
     goalCollected: number;
     bankBalances: { [key: string]: number };
+}
+
+export interface Notification {
+    id?: string;
+    title: string;
+    message: string;
+    type: 'budget-alert' | 'warning' | 'info' | 'success';
+    icon?: string;
+    timestamp: Date;
+    read: boolean;
+    category?: string;
+    amount?: number;
+    limit?: number;
 }

@@ -44,6 +44,26 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Investments table
+CREATE TABLE IF NOT EXISTS investments (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    amount NUMERIC NOT NULL,
+    return_pct NUMERIC,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Budgets table
+CREATE TABLE IF NOT EXISTS budgets (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    limit_amount NUMERIC NOT NULL,
+    UNIQUE(user_id, category)
+);
+
 -- User Preferences (Goals/Wealth)
 CREATE TABLE IF NOT EXISTS user_preferences (
     user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,

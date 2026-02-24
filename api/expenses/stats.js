@@ -26,9 +26,14 @@ module.exports = async (req, res) => {
         const prefsResult = await query('SELECT * FROM user_preferences WHERE user_id = $1', [userId]);
         const prefs = prefsResult.rows[0] || {};
 
-        // Total investment from investments table
-        const invResult = await query('SELECT COALESCE(SUM(amount), 0) as total FROM investments WHERE user_id = $1', [userId]);
-        const totalInvestment = parseFloat(invResult.rows[0].total);
+        // Total investment from investments table (resilient to missing table)
+        let totalInvestment = 0;
+        try {
+            const invResult = await query('SELECT COALESCE(SUM(amount), 0) as total FROM investments WHERE user_id = $1', [userId]);
+            totalInvestment = parseFloat(invResult.rows[0].total);
+        } catch (e) {
+            totalInvestment = 0;
+        }
 
         // Monthly expenses
         const now = new Date();
@@ -51,6 +56,6 @@ module.exports = async (req, res) => {
         });
     } catch (err) {
         console.error('Stats error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        return res.status(500).json({ error: 'Internal server error' });
     }
 };

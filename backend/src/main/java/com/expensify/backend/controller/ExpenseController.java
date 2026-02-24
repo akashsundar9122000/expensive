@@ -42,9 +42,42 @@ public class ExpenseController {
     }
 
     @PostMapping("/banks")
-    public ResponseEntity<BankAccount> addBank(@RequestParam String name, Principal principal) {
+    public ResponseEntity<BankAccount> addBank(
+            @RequestParam String name,
+            @RequestParam(required = false) String balance,
+            Principal principal) {
         User user = userRepository.findByEmail(principal.getName()).orElseThrow();
-        return ResponseEntity.ok(expenseService.addBank(user, name));
+        BigDecimal parsedBalance = parseBalance(balance);
+        return ResponseEntity.ok(expenseService.addBank(user, name, parsedBalance));
+    }
+
+    @PutMapping("/banks")
+    public ResponseEntity<BankAccount> updateBank(
+            @RequestParam Long id,
+            @RequestParam String name,
+            @RequestParam(required = false) String balance,
+            Principal principal) {
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+        BigDecimal parsedBalance = parseBalance(balance);
+        return ResponseEntity.ok(expenseService.updateBank(user, id, name, parsedBalance));
+    }
+
+    private BigDecimal parseBalance(String balance) {
+        if (balance == null || balance.isBlank()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(balance);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    @DeleteMapping("/banks")
+    public ResponseEntity<Void> deleteBank(@RequestParam Long id, Principal principal) {
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+        expenseService.deleteBank(user, id);
+        return ResponseEntity.ok().build();
     }
 
     @GetMapping("/stats")
@@ -109,8 +142,17 @@ public class ExpenseController {
 
     @PutMapping("/preferences")
     public ResponseEntity<com.expensify.backend.model.UserPreference> updatePreferences(
-            @RequestBody com.expensify.backend.model.UserPreference prefs, Principal principal) {
+            @RequestBody Map<String, Object> body, Principal principal) {
         User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+        com.expensify.backend.model.UserPreference prefs = new com.expensify.backend.model.UserPreference();
+        if (body.get("goalName") != null) prefs.setGoalName(body.get("goalName").toString());
+        if (body.get("goalRequired") != null) prefs.setGoalRequired(new BigDecimal(body.get("goalRequired").toString()));
+        if (body.get("goalCollected") != null) prefs.setGoalCollected(new BigDecimal(body.get("goalCollected").toString()));
+        if (body.get("totalInvestment") != null) prefs.setTotalInvestment(new BigDecimal(body.get("totalInvestment").toString()));
+        if (body.get("investAmount") != null) prefs.setInvestAmount(new BigDecimal(body.get("investAmount").toString()));
+        if (body.get("goalCollectedIncrement") != null) {
+            prefs.setGoalCollectedIncrement(new BigDecimal(body.get("goalCollectedIncrement").toString()));
+        }
         return ResponseEntity.ok(expenseService.updatePreferences(user, prefs));
     }
 

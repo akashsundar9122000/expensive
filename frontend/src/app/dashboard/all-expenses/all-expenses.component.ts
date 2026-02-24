@@ -1,10 +1,16 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ExpenseService } from '../../services/expense.service';
-import { Transaction, User } from '../../services/models';
-import { Observable, combineLatest, map, BehaviorSubject } from 'rxjs';
+import { Transaction, User, Bank } from '../../services/models';
+import { Observable, combineLatest, map, BehaviorSubject, take } from 'rxjs';
 import { SidebarComponent } from '../../shared/sidebar/sidebar.component';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
+import Chart from 'chart.js/auto';
+import * as XLSX from 'xlsx';
 
 @Component({
   selector: 'app-all-expenses',
@@ -49,7 +55,7 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } 
 
         <div class="dashboard-body">
           <div class="card table-card">
-            <div class="flex-between filter-section">
+            <div class="filter-section-wrapper">
               <div class="filter-tabs">
                 <button class="filter-tab" 
                         [class.active]="(categoryFilter$ | async) === 'All'"
@@ -70,9 +76,42 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } 
                         [class.active]="(categoryFilter$ | async) === 'Bills'"
                         (click)="updateCategory('Bills')">Bills</button>
               </div>
-              <button class="outline-btn export-btn" (click)="exportCSV(data.transactions || [])">
-                <i class="ph ph-download-simple"></i> <span class="btn-text">Export CSV</span>
-              </button>
+            </div>
+
+            <div class="filter-controls-wrapper">
+              <div class="filter-controls">
+                <div class="filter-group hide-mobile" style="min-width: 140px;">
+                  <label style="font-size: 12px; color: var(--text-muted); margin-right: 6px;">Month:</label>
+                  <input type="month" (ngModelChange)="updateMonth($event)" [ngModel]="monthFilter$ | async" style="width: 100px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border-light); background: var(--bg-card); font-size: 11px; box-sizing: border-box;">
+                </div>
+                <div class="filter-group hide-mobile">
+                  <label style="font-size: 12px; color: var(--text-muted); margin-right: 8px;">Bank:</label>
+                  <select (ngModelChange)="updateBank($event)" [ngModel]="(bankFilter$ | async)" style="padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border-light); background: var(--bg-card); font-size: 12px;">
+                    <option value="All">All Banks</option>
+                    <option *ngFor="let bank of (banks$ | async)" [value]="bank.name">{{ bank.name }}</option>
+                  </select>
+                </div>
+                <div class="filter-group hide-mobile">
+                  <label style="font-size: 12px; color: var(--text-muted); margin-right: 8px;">Mode:</label>
+                  <select (ngModelChange)="updateMode($event)" [ngModel]="(modeFilter$ | async)" style="padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border-light); background: var(--bg-card); font-size: 12px;">
+                    <option value="All">All Modes</option>
+                    <option value="UPI">UPI</option>
+                    <option value="Bank">Bank Transfer</option>
+                    <option value="Card">Credit Card</option>
+                  </select>
+                </div>
+              </div>
+              <div class="export-buttons">
+                <button class="outline-btn export-btn" (click)="exportCSV(data.transactions || [])">
+                  <i class="ph ph-download-simple"></i> <span class="btn-text">Export CSV</span>
+                </button>
+                <button class="outline-btn export-btn" (click)="exportPDF(data.transactions || [])">
+                  <i class="ph ph-file-pdf"></i> <span class="btn-text">Export PDF</span>
+                </button>
+                <button class="outline-btn export-btn" (click)="exportXLSX(data.transactions || [])">
+                  <i class="ph ph-file-xls"></i> <span class="btn-text">Export XLSX</span>
+                </button>
+              </div>
             </div>
 
             <div class="table-container">
@@ -82,6 +121,7 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } 
                     <th>Amount</th>
                     <th>Category</th>
                     <th>Merchant</th>
+                    <th class="hide-mobile">Bank</th>
                     <th class="hide-mobile">Date</th>
                     <th class="hide-mobile">Mode</th>
                     <th>Action</th>
@@ -96,6 +136,9 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } 
                       </span>
                     </td>
                     <td>{{ t.subCategory }}</td>
+                    <td class="hide-mobile">
+                      <span class="bank-chip">{{ getTransactionBank(t.id) || 'N/A' }}</span>
+                    </td>
                     <td class="hide-mobile">{{ t.date | date:'mediumDate' }}</td>
                     <td class="hide-mobile">
                       <span class="mode-chip" [ngClass]="{
@@ -105,13 +148,18 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } 
                       }">{{ t.mode }}</span>
                     </td>
                     <td>
-                      <button class="delete-btn" (click)="deleteTransaction(t.id)">
-                        <i class="ph ph-trash"></i>
-                      </button>
+                      <div class="action-buttons">
+                        <button class="edit-btn" (click)="editTransaction(t)" title="Edit">
+                          <i class="ph ph-pencil"></i>
+                        </button>
+                        <button class="delete-btn" (click)="deleteTransaction(t.id)" title="Delete">
+                          <i class="ph ph-trash"></i>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                   <tr *ngIf="data.transactions?.length === 0">
-                    <td colspan="6">
+                    <td colspan="7">
                       <div class="empty-state" style="padding: 40px;">
                         <i class="ph ph-receipt"></i>
                         <p>No transactions found matching your criteria.</p>
@@ -126,11 +174,27 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } 
       </div>
     </main>
 
-    <!-- Modal for Adding Expense -->
+    <!-- Hidden Charts Container for PDF Export -->
+    <div #chartsContainer style="position: absolute; left: -9999px; width: 800px; background: white; padding: 20px;">
+      <div style="margin-bottom: 30px;">
+        <h2 style="color: #1f2937; margin-bottom: 20px; font-size: 20px;">Expenses by Category</h2>
+        <canvas #categoryChart style="background: white; border-radius: 8px;"></canvas>
+      </div>
+      <div style="margin-bottom: 30px;">
+        <h2 style="color: #1f2937; margin-bottom: 20px; font-size: 20px;">Expenses by Payment Mode</h2>
+        <canvas #modeChart style="background: white; border-radius: 8px;"></canvas>
+      </div>
+      <div style="margin-bottom: 30px;">
+        <h2 style="color: #1f2937; margin-bottom: 20px; font-size: 20px;">Expenses by Bank</h2>
+        <canvas #bankChart style="background: white; border-radius: 8px;"></canvas>
+      </div>
+    </div>
+
+    <!-- Modal for Adding/Editing Expense -->
     <div class="modal-overlay" *ngIf="showModal" (click)="toggleModal()">
         <div class="modal-card" (click)="$event.stopPropagation()">
             <div class="modal-header">
-                <h3>Add New Expense</h3>
+                <h3>{{ editingTransactionId ? 'Edit Expense' : 'Add New Expense' }}</h3>
                 <button class="close-btn" (click)="toggleModal()"><i class="ph ph-x"></i></button>
             </div>
             <form [formGroup]="expenseForm" (ngSubmit)="onSubmit()">
@@ -177,11 +241,12 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } 
                 <div class="form-group">
                     <label>Bank Account</label>
                     <select formControlName="bank">
-                        <option *ngFor="let bank of (user$ | async)?.bankAccounts" [value]="bank">{{bank}}</option>
+                        <option *ngFor="let bank of (banks$ | async)" [value]="bank.name">{{bank.name}}</option>
                     </select>
                 </div>
                 <button type="submit" class="primary-btn" [disabled]="expenseForm.invalid" style="width: 100%; justify-content: center; margin-top: 10px;">
-                    <i class="ph ph-check"></i> Add Transaction
+                    <i class="ph" [ngClass]="editingTransactionId ? 'ph-check' : 'ph-plus'"></i> 
+                    {{ editingTransactionId ? 'Update Transaction' : 'Add Transaction' }}
                 </button>
             </form>
         </div>
@@ -190,8 +255,116 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } 
   styles: [`
     .amount-text { color: var(--text-dark); }
     .category-badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+    .bank-chip { 
+      padding: 4px 10px; 
+      border-radius: 6px; 
+      font-size: 12px; 
+      font-weight: 500; 
+      background: rgba(59, 130, 246, 0.1); 
+      color: #3B82F6;
+    }
     .table-row-animate { animation: fadeIn 0.3s ease; }
     .export-btn { font-size: 13px; padding: 8px 16px; display: flex; align-items: center; gap: 8px; }
+    
+    .filter-section {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    
+    .filter-section-wrapper {
+      display: flex;
+      width: 100%;
+      margin-bottom: 16px;
+    }
+
+    .filter-controls-wrapper {
+      display: flex;
+      width: 100%;
+      gap: 16px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+
+    .filter-controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .export-buttons {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    
+    .table-card {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow: hidden;
+    }
+    
+    .table-container {
+      overflow-x: auto;
+      border-radius: 8px;
+      background: var(--bg-card);
+    }
+
+    .table-container table {
+      min-width: 100%;
+      border-spacing: 0;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .edit-btn, .delete-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 16px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .edit-btn:hover {
+      background: rgba(59, 130, 246, 0.1);
+      color: #3B82F6;
+    }
+
+    .delete-btn:hover {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+    }
+
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .filter-group select {
+      color: var(--text-dark);
+      cursor: pointer;
+    }
+
+    .filter-group select:focus {
+      outline: none;
+      border-color: var(--primary-blue);
+    }
     
     .menu-trigger {
         background: none;
@@ -305,10 +478,27 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } 
             padding: 20px;
         }
 
-        .filter-section {
+        .filter-section-wrapper {
+            display: flex;
+            width: 100%;
+            overflow-x: auto;
+        }
+
+        .filter-controls-wrapper {
             flex-direction: column;
             align-items: flex-start;
             gap: 16px;
+        }
+
+        .filter-controls {
+            flex-direction: column;
+            width: 100%;
+            gap: 12px;
+        }
+
+        .export-buttons {
+            width: 100%;
+            justify-content: space-around;
         }
 
         .filter-tabs {
@@ -346,12 +536,23 @@ import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } 
 })
 export class AllExpensesComponent implements OnInit {
   user$!: Observable<User | null>;
+  banks$!: Observable<Bank[]>;
   searchQuery$ = new BehaviorSubject<string>('');
   categoryFilter$ = new BehaviorSubject<string>('All');
+  bankFilter$ = new BehaviorSubject<string>('All');
+  modeFilter$ = new BehaviorSubject<string>('All');
+  monthFilter$ = new BehaviorSubject<string>(this.getCurrentMonth());
   isMobileMenuOpen = false;
   showModal = false;
   expenseForm!: FormGroup;
   filteredTransactions$!: Observable<Transaction[]>;
+  editingTransactionId: number | null = null;
+  transactionBankMap: Map<number, string> = new Map();
+
+  @ViewChild('chartsContainer') chartsContainer!: ElementRef;
+  @ViewChild('categoryChart') categoryChart!: ElementRef;
+  @ViewChild('modeChart') modeChart!: ElementRef;
+  @ViewChild('bankChart') bankChart!: ElementRef;
 
   private categoryColors: Record<string, { bg: string; color: string }> = {
     'Food & Grocery': { bg: 'rgba(16, 185, 129, 0.1)', color: '#10B981' },
@@ -367,19 +568,34 @@ export class AllExpensesComponent implements OnInit {
 
   ngOnInit(): void {
     this.user$ = this.expenseService.getUser();
+    this.banks$ = this.expenseService.getBanks();
+
+    // Store bank information for transactions
+    this.expenseService.getTransactions().pipe(take(1)).subscribe(transactions => {
+      transactions.forEach(t => {
+        // Since we don't have bank data in transaction, we'll track it differently
+        // This will be updated when we have proper bank mapping
+      });
+    });
 
     this.filteredTransactions$ = combineLatest([
       this.expenseService.getTransactions(),
       this.searchQuery$,
-      this.categoryFilter$
+      this.categoryFilter$,
+      this.bankFilter$,
+      this.modeFilter$,
+      this.monthFilter$
     ]).pipe(
-      map(([transactions, query, category]) => {
+      map(([transactions, query, category, bank, mode, month]) => {
         return transactions.filter(t => {
           const matchesQuery = !query ||
             (t.subCategory && t.subCategory.toLowerCase().includes(query.toLowerCase())) ||
             (t.category && t.category.toLowerCase().includes(query.toLowerCase()));
           const matchesCategory = category === 'All' || t.category === category;
-          return matchesQuery && matchesCategory;
+          const matchesBank = bank === 'All' || this.getTransactionBank(t.id) === bank;
+          const matchesMode = mode === 'All' || t.mode === mode;
+          const matchesMonth = !month || this.isTransactionInMonth(t.date, month);
+          return matchesQuery && matchesCategory && matchesBank && matchesMode && matchesMonth;
         });
       })
     );
@@ -397,6 +613,122 @@ export class AllExpensesComponent implements OnInit {
 
   updateCategory(category: string) {
     this.categoryFilter$.next(category);
+  }
+
+  updateBank(bank: string) {
+    this.bankFilter$.next(bank);
+  }
+
+  updateMode(mode: string) {
+    this.modeFilter$.next(mode);
+  }
+
+  updateMonth(month: string) {
+    this.monthFilter$.next(month);
+  }
+
+  private getCurrentMonth(): string {
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+  }
+
+  private isTransactionInMonth(dateStr: string, monthStr: string): boolean {
+    try {
+      const date = new Date(dateStr);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const transactionMonth = `${year}-${month}`;
+      return transactionMonth === monthStr;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  private getCategoryData(transactions: Transaction[]): { labels: string[], data: number[], colors: string[] } {
+    const categoryMap = new Map<string, number>();
+    const categoryColors: Record<string, string> = {
+      'Food & Grocery': '#10B981',
+      'Shopping': '#8B5CF6',
+      'Entertainment': '#F59E0B',
+      'Transport': '#3B82F6',
+      'Bills': '#EF4444',
+      'Education': '#EC4899',
+      'Home': '#14B8A6',
+      'Healthcare': '#F43F5E',
+      'Lifestyle': '#06B6D4',
+      'Finance': '#8B5CF6',
+      'Other': '#64748B'
+    };
+
+    transactions.forEach(t => {
+      const amount = categoryMap.get(t.category) || 0;
+      categoryMap.set(t.category, amount + t.amount);
+    });
+
+    const labels = Array.from(categoryMap.keys());
+    const data = labels.map(l => parseFloat((categoryMap.get(l) || 0).toFixed(2)));
+    const colors = labels.map(l => categoryColors[l] || '#64748B');
+
+    return { labels, data, colors };
+  }
+
+  private getModeData(transactions: Transaction[]): { labels: string[], data: number[], colors: string[] } {
+    const modeMap = new Map<string, number>();
+    const modeColors: Record<string, string> = {
+      'UPI': '#3B82F6',
+      'Bank': '#10B981',
+      'Card': '#F59E0B'
+    };
+
+    transactions.forEach(t => {
+      const amount = modeMap.get(t.mode) || 0;
+      modeMap.set(t.mode, amount + t.amount);
+    });
+
+    const labels = Array.from(modeMap.keys());
+    const data = labels.map(l => parseFloat((modeMap.get(l) || 0).toFixed(2)));
+    const colors = labels.map(l => modeColors[l] || '#64748B');
+
+    return { labels, data, colors };
+  }
+
+  private getBankData(transactions: Transaction[]): { labels: string[], data: number[], colors: string[] } {
+    const bankMap = new Map<string, number>();
+    const bankColors: string[] = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6', '#F43F5E'];
+    let colorIndex = 0;
+
+    transactions.forEach(t => {
+      const bank = this.getTransactionBank(t.id) || 'Unknown';
+      const amount = bankMap.get(bank) || 0;
+      bankMap.set(bank, amount + t.amount);
+    });
+
+    const labels = Array.from(bankMap.keys());
+    const data = labels.map(l => parseFloat((bankMap.get(l) || 0).toFixed(2)));
+    const colors = labels.map(() => bankColors[colorIndex++ % bankColors.length]);
+
+    return { labels, data, colors };
+  }
+
+  getTransactionBank(transactionId: number): string {
+    // This will be populated from the transaction service
+    // For now, return a placeholder - in a real app, this should come from the backend
+    return this.transactionBankMap.get(transactionId) || 'SBI';
+  }
+
+  editTransaction(transaction: Transaction) {
+    this.editingTransactionId = transaction.id;
+    this.expenseForm.patchValue({
+      amount: transaction.amount,
+      category: transaction.category,
+      subCategory: transaction.subCategory,
+      date: transaction.date,
+      mode: transaction.mode,
+      bank: this.getTransactionBank(transaction.id)
+    });
+    this.showModal = true;
   }
 
   deleteTransaction(id: number) {
@@ -417,6 +749,545 @@ export class AllExpensesComponent implements OnInit {
     URL.revokeObjectURL(url);
   }
 
+  private async generateChartImage(chartType: 'category' | 'mode' | 'bank' | 'line' | 'bar'): Promise<string> {
+    const container = document.createElement('div');
+    container.style.width = '600px';
+    container.style.height = '350px';
+    container.style.position = 'absolute';
+    container.style.left = '-9999px';
+    container.style.backgroundColor = 'white';
+    document.body.appendChild(container);
+
+    const canvas = document.createElement('canvas');
+    container.appendChild(canvas);
+
+    let data;
+    let chartConfig: any;
+
+    if (chartType === 'category') {
+      data = this.getCategoryData(this.currentTransactions);
+      chartConfig = {
+        type: 'doughnut',
+        data: {
+          labels: data.labels,
+          datasets: [{
+            data: data.data,
+            backgroundColor: data.colors,
+            borderColor: 'white',
+            borderWidth: 2
+          }]
+        }
+      };
+    } else if (chartType === 'mode') {
+      data = this.getModeData(this.currentTransactions);
+      chartConfig = {
+        type: 'pie',
+        data: {
+          labels: data.labels,
+          datasets: [{
+            data: data.data,
+            backgroundColor: data.colors,
+            borderColor: 'white',
+            borderWidth: 2
+          }]
+        }
+      };
+    } else if (chartType === 'bank') {
+      data = this.getBankData(this.currentTransactions);
+      chartConfig = {
+        type: 'doughnut',
+        data: {
+          labels: data.labels,
+          datasets: [{
+            data: data.data,
+            backgroundColor: data.colors,
+            borderColor: 'white',
+            borderWidth: 2
+          }]
+        }
+      };
+    } else if (chartType === 'line') {
+      const lineData = this.getTimeSeriesData(this.currentTransactions);
+      chartConfig = {
+        type: 'line',
+        data: {
+          labels: lineData.dates,
+          datasets: [{
+            label: 'Daily Spending',
+            data: lineData.amounts,
+            borderColor: '#3B82F6',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            tension: 0.4,
+            fill: true,
+            pointRadius: 4,
+            pointBackgroundColor: '#3B82F6'
+          }]
+        },
+        options: {
+          responsive: false,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: true, position: 'top' as const }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: { callback: (value: any) => `₹${value}` }
+            }
+          }
+        }
+      };
+    } else if (chartType === 'bar') {
+      data = this.getCategoryData(this.currentTransactions);
+      chartConfig = {
+        type: 'bar',
+        data: {
+          labels: data.labels,
+          datasets: [{
+            label: 'Amount Spent',
+            data: data.data,
+            backgroundColor: data.colors,
+            borderColor: data.colors.map(() => '#333'),
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: false,
+          maintainAspectRatio: false,
+          indexAxis: 'y' as const,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            x: {
+              ticks: { callback: (value: any) => `₹${value}` }
+            }
+          }
+        }
+      };
+    }
+
+    const chart = new Chart(canvas, chartConfig);
+
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    const imgData = canvas.toDataURL('image/png');
+    document.body.removeChild(container);
+    chart.destroy();
+
+    return imgData;
+  }
+
+  private getTimeSeriesData(transactions: Transaction[]): { dates: string[]; amounts: number[] } {
+    const dateMap = new Map<string, number>();
+    
+    transactions.forEach(t => {
+      try {
+        const date = new Date(t.date);
+        const dateStr = date.toLocaleDateString('en-IN');
+        const current = dateMap.get(dateStr) || 0;
+        dateMap.set(dateStr, current + (parseFloat(String(t.amount)) || 0));
+      } catch (e) {
+        // Skip invalid dates
+      }
+    });
+
+    const sortedEntries = Array.from(dateMap.entries())
+      .sort((a, b) => new Date(a[0]).getTime() - new Date(b[0]).getTime());
+
+    return {
+      dates: sortedEntries.map(e => e[0]),
+      amounts: sortedEntries.map(e => parseFloat(e[1].toFixed(2)))
+    };
+  }
+
+  currentTransactions: Transaction[] = [];
+
+  async exportPDF(transactions: Transaction[]) {
+    if (!transactions.length) {
+      alert('No transactions to export');
+      return;
+    }
+
+    try {
+      this.currentTransactions = transactions;
+      
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      let yPosition = 15;
+      const imgWidth = 170;
+      const imgHeight = 70;
+
+      // Title
+      doc.setFontSize(18);
+      doc.setTextColor(31, 41, 55);
+      doc.text('Transaction Report', pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 12;
+
+      // Report Date and Month Filter
+      doc.setFontSize(10);
+      doc.setTextColor(107, 114, 128);
+      const monthValue = (this.monthFilter$ as BehaviorSubject<string>).value || 'All months';
+      doc.text(`Generated: ${new Date().toLocaleDateString()} | Period: ${monthValue}`, pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 15;
+
+      // Summary Stats
+      const totalAmount = transactions.reduce((sum, t) => sum + (parseFloat(String(t.amount)) || 0), 0);
+      const avgAmount = transactions.length > 0 ? (totalAmount / transactions.length) : 0;
+
+      const summaryData = [
+        ['Total Transactions', String(transactions.length)],
+        ['Total Amount', `₹${totalAmount.toFixed(2)}`],
+        ['Average Amount', `₹${avgAmount.toFixed(2)}`]
+      ];
+
+      autoTable(doc, {
+        startY: yPosition,
+        head: [['Metric', 'Value']],
+        body: summaryData,
+        margin: 12,
+        theme: 'grid',
+        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 9 },
+        columnStyles: { 1: { halign: 'right' } }
+      });
+      yPosition = (doc as any).lastAutoTable?.finalY + 12;
+
+      // Category Breakdown Chart
+      const categoryData = this.getCategoryData(transactions);
+      if (categoryData.labels.length > 0 && totalAmount > 0) {
+        try {
+          if (yPosition + imgHeight + 20 > pageHeight) {
+            doc.addPage();
+            yPosition = 15;
+          }
+
+          doc.setFontSize(12);
+          doc.setTextColor(31, 41, 55);
+          doc.text('Category Breakdown', 12, yPosition);
+          yPosition += 8;
+
+          const categoryChart = await this.generateChartImage('category');
+          doc.addImage(categoryChart, 'PNG', (pageWidth - imgWidth) / 2, yPosition, imgWidth, imgHeight);
+          yPosition += imgHeight + 12;
+        } catch (e) {
+          console.warn('Category chart error:', e);
+          yPosition += 8;
+        }
+      }
+
+      // Bar Chart - Category Comparison
+      try {
+        if (yPosition + imgHeight + 20 > pageHeight) {
+          doc.addPage();
+          yPosition = 15;
+        }
+
+        doc.setFontSize(12);
+        doc.setTextColor(31, 41, 55);
+        doc.text('Spending by Category (Bar Chart)', 12, yPosition);
+        yPosition += 8;
+
+        const barChart = await this.generateChartImage('bar');
+        doc.addImage(barChart, 'PNG', (pageWidth - imgWidth) / 2, yPosition, imgWidth, imgHeight);
+        yPosition += imgHeight + 12;
+      } catch (e) {
+        console.warn('Bar chart error:', e);
+        yPosition += 8;
+      }
+
+      // Line Chart - Daily Spending Trend
+      const timeSeriesData = this.getTimeSeriesData(transactions);
+      if (timeSeriesData.dates.length > 1) {
+        try {
+          if (yPosition + imgHeight + 20 > pageHeight) {
+            doc.addPage();
+            yPosition = 15;
+          }
+
+          doc.setFontSize(12);
+          doc.setTextColor(31, 41, 55);
+          doc.text('Daily Spending Trend', 12, yPosition);
+          yPosition += 8;
+
+          const lineChart = await this.generateChartImage('line');
+          doc.addImage(lineChart, 'PNG', (pageWidth - imgWidth) / 2, yPosition, imgWidth, imgHeight);
+          yPosition += imgHeight + 12;
+        } catch (e) {
+          console.warn('Line chart error:', e);
+          yPosition += 8;
+        }
+      }
+
+      // Payment Mode Chart
+      const modeData = this.getModeData(transactions);
+      if (modeData.labels.length > 0 && totalAmount > 0) {
+        try {
+          if (yPosition + imgHeight + 20 > pageHeight) {
+            doc.addPage();
+            yPosition = 15;
+          }
+
+          doc.setFontSize(12);
+          doc.setTextColor(31, 41, 55);
+          doc.text('Payment Mode Distribution', 12, yPosition);
+          yPosition += 8;
+
+          const modeChart = await this.generateChartImage('mode');
+          doc.addImage(modeChart, 'PNG', (pageWidth - imgWidth) / 2, yPosition, imgWidth, imgHeight);
+          yPosition += imgHeight + 12;
+        } catch (e) {
+          console.warn('Mode chart error:', e);
+          yPosition += 8;
+        }
+      }
+
+      // Bank Account Chart
+      const bankData = this.getBankData(transactions);
+      if (bankData.labels.length > 0 && totalAmount > 0) {
+        try {
+          if (yPosition + imgHeight + 20 > pageHeight) {
+            doc.addPage();
+            yPosition = 15;
+          }
+
+          doc.setFontSize(12);
+          doc.setTextColor(31, 41, 55);
+          doc.text('Bank Account Distribution', 12, yPosition);
+          yPosition += 8;
+
+          const bankChart = await this.generateChartImage('bank');
+          doc.addImage(bankChart, 'PNG', (pageWidth - imgWidth) / 2, yPosition, imgWidth, imgHeight);
+          yPosition += imgHeight + 12;
+        } catch (e) {
+          console.warn('Bank chart error:', e);
+          yPosition += 8;
+        }
+      }
+
+      // Category Details Table
+      if (yPosition + 40 > pageHeight) {
+        doc.addPage();
+        yPosition = 15;
+      }
+
+      doc.setFontSize(12);
+      doc.setTextColor(31, 41, 55);
+      doc.text('Category Details', 12, yPosition);
+      yPosition += 8;
+
+      const categoryTableData = categoryData.labels.map((label, idx) => [
+        label.substring(0, 20),
+        `₹${(categoryData.data[idx] || 0).toFixed(2)}`,
+        `${((categoryData.data[idx] / totalAmount) * 100).toFixed(1)}%`
+      ]);
+
+      autoTable(doc, {
+        startY: yPosition,
+        head: [['Category', 'Amount', '%']],
+        body: categoryTableData,
+        margin: 12,
+        theme: 'grid',
+        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 9 },
+        columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } }
+      });
+      yPosition = (doc as any).lastAutoTable?.finalY + 10;
+
+      // Payment Mode Details Table
+      if (yPosition + 40 > pageHeight) {
+        doc.addPage();
+        yPosition = 15;
+      }
+
+      doc.setFontSize(12);
+      doc.setTextColor(31, 41, 55);
+      doc.text('Payment Mode Details', 12, yPosition);
+      yPosition += 8;
+
+      const modeTableData = modeData.labels.map((label, idx) => [
+        label,
+        `₹${(modeData.data[idx] || 0).toFixed(2)}`,
+        `${((modeData.data[idx] / totalAmount) * 100).toFixed(1)}%`
+      ]);
+
+      autoTable(doc, {
+        startY: yPosition,
+        head: [['Payment Mode', 'Amount', '%']],
+        body: modeTableData,
+        margin: 12,
+        theme: 'grid',
+        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 9 },
+        columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } }
+      });
+      yPosition = (doc as any).lastAutoTable?.finalY + 10;
+
+      // Bank Details Table
+      if (yPosition + 40 > pageHeight) {
+        doc.addPage();
+        yPosition = 15;
+      }
+
+      doc.setFontSize(12);
+      doc.setTextColor(31, 41, 55);
+      doc.text('Bank Account Details', 12, yPosition);
+      yPosition += 8;
+
+      const bankTableData = bankData.labels.map((label, idx) => [
+        label.substring(0, 15),
+        `₹${(bankData.data[idx] || 0).toFixed(2)}`,
+        `${((bankData.data[idx] / totalAmount) * 100).toFixed(1)}%`
+      ]);
+
+      autoTable(doc, {
+        startY: yPosition,
+        head: [['Bank', 'Amount', '%']],
+        body: bankTableData,
+        margin: 12,
+        theme: 'grid',
+        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 9 },
+        columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } }
+      });
+      yPosition = (doc as any).lastAutoTable?.finalY + 10;
+
+      // Transaction Details
+      if (yPosition + 40 > pageHeight) {
+        doc.addPage();
+        yPosition = 15;
+      }
+
+      doc.setFontSize(12);
+      doc.setTextColor(31, 41, 55);
+      doc.text('Recent Transactions', 12, yPosition);
+      yPosition += 8;
+
+      const transactionTableData = transactions.slice(0, 50).map(t => {
+        try {
+          const dateStr = t.date ? new Date(t.date).toLocaleDateString('en-IN') : 'N/A';
+          return [
+            dateStr,
+            (t.category || 'N/A').substring(0, 12),
+            (t.subCategory || 'N/A').substring(0, 10),
+            `₹${(parseFloat(String(t.amount)) || 0).toFixed(2)}`,
+            (t.mode || 'N/A').substring(0, 8)
+          ];
+        } catch (e) {
+          return [t.date || 'N/A', 'N/A', 'N/A', 'N/A', 'N/A'];
+        }
+      });
+
+      autoTable(doc, {
+        startY: yPosition,
+        head: [['Date', 'Category', 'Desc', 'Amount', 'Mode']],
+        body: transactionTableData,
+        margin: 12,
+        theme: 'grid',
+        headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 8 },
+        columnStyles: { 3: { halign: 'right' } },
+        pageBreak: 'auto'
+      });
+
+      // Add page numbers
+      const pageCount = (doc as any).internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(150, 150, 150);
+        doc.text(`Page ${i} of ${pageCount}`, pageWidth / 2, pageHeight - 8, { align: 'center' });
+      }
+
+      // Save PDF
+      const fileName = `expenses_${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+      alert('✓ PDF exported successfully with charts!');
+    } catch (error) {
+      console.error('PDF Export Error:', error);
+      alert('Error exporting PDF. Please try again or contact support.');
+    }
+  }
+
+  exportXLSX(transactions: Transaction[]) {
+    if (!transactions.length) {
+      alert('No transactions to export');
+      return;
+    }
+
+    try {
+      // Prepare transaction data
+      const transactionData = transactions.map(t => ({
+        'Date': t.date ? new Date(t.date).toLocaleDateString('en-IN') : 'N/A',
+        'Category': t.category || 'N/A',
+        'Merchant': t.subCategory || 'N/A',
+        'Amount': parseFloat(String(t.amount)) || 0,
+        'Mode': t.mode || 'N/A',
+        'Bank': this.getTransactionBank(t.id) || 'N/A'
+      }));
+
+      // Summary stats
+      const totalAmount = transactions.reduce((sum, t) => sum + (parseFloat(String(t.amount)) || 0), 0);
+      const avgAmount = transactions.length > 0 ? (totalAmount / transactions.length) : 0;
+
+      const summaryData = [
+        { 'Metric': 'Total Transactions', 'Value': transactions.length },
+        { 'Metric': 'Total Amount', 'Value': totalAmount.toFixed(2) },
+        { 'Metric': 'Average Amount', 'Value': avgAmount.toFixed(2) }
+      ];
+
+      // Category breakdown
+      const categoryData = this.getCategoryData(transactions);
+      const categoryBreakdown = categoryData.labels.map((label, idx) => ({
+        'Category': label,
+        'Amount': categoryData.data[idx].toFixed(2),
+        'Percentage': ((categoryData.data[idx] / totalAmount) * 100).toFixed(1) + '%'
+      }));
+
+      // Payment mode breakdown
+      const modeData = this.getModeData(transactions);
+      const modeBreakdown = modeData.labels.map((label, idx) => ({
+        'Payment Mode': label,
+        'Amount': modeData.data[idx].toFixed(2),
+        'Percentage': ((modeData.data[idx] / totalAmount) * 100).toFixed(1) + '%'
+      }));
+
+      // Bank breakdown
+      const bankData = this.getBankData(transactions);
+      const bankBreakdown = bankData.labels.map((label, idx) => ({
+        'Bank': label,
+        'Amount': bankData.data[idx].toFixed(2),
+        'Percentage': ((bankData.data[idx] / totalAmount) * 100).toFixed(1) + '%'
+      }));
+
+      // Create workbook with multiple sheets
+      const workbook = XLSX.utils.book_new();
+
+      // Add sheets
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryData), 'Summary');
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(transactionData), 'Transactions');
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(categoryBreakdown), 'Category Breakdown');
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(modeBreakdown), 'Payment Mode');
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(bankBreakdown), 'Bank Details');
+
+      // Generate filename with date
+      const fileName = `expenses_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+      // Write file
+      XLSX.writeFile(workbook, fileName);
+      alert('✓ XLSX exported successfully!');
+    } catch (error) {
+      console.error('XLSX Export Error:', error);
+      alert('Error exporting XLSX. Please try again or contact support.');
+    }
+  }
+
   private initForm() {
     this.expenseForm = this.fb.group({
       amount: ['', [Validators.required, Validators.min(1)]],
@@ -430,28 +1301,37 @@ export class AllExpensesComponent implements OnInit {
 
   toggleModal() {
     this.showModal = !this.showModal;
-    if (!this.showModal) {
-      this.expenseForm.reset({
-        category: 'Food & Grocery',
-        date: new Date().toISOString().split('T')[0],
-        mode: 'UPI',
-        bank: 'SBI'
-      });
-    } else {
-      // Pre-select first bank if available
-      this.user$.subscribe(user => {
-        if (user && user.bankAccounts && user.bankAccounts.length > 0) {
-          this.expenseForm.patchValue({ bank: user.bankAccounts[0] });
-        }
-      });
-    }
+    this.editingTransactionId = null;
+    this.banks$.pipe(take(1)).subscribe(banks => {
+      const firstBank = banks[0]?.name || '';
+      if (!this.showModal) {
+        this.expenseForm.reset({
+          category: 'Food & Grocery',
+          date: new Date().toISOString().split('T')[0],
+          mode: 'UPI',
+          bank: firstBank
+        });
+        this.editingTransactionId = null;
+      } else if (firstBank) {
+        this.expenseForm.patchValue({ bank: firstBank });
+      }
+    });
   }
 
   onSubmit() {
     if (this.expenseForm.valid) {
       const formValue = this.expenseForm.value;
       const { bank, ...transactionData } = formValue;
-      this.expenseService.addTransaction(transactionData, bank);
+      
+      if (this.editingTransactionId) {
+        // Update existing transaction
+        this.expenseService.updateTransaction(this.editingTransactionId, transactionData);
+        this.transactionBankMap.set(this.editingTransactionId, bank);
+      } else {
+        // Add new transaction
+        this.expenseService.addTransaction(transactionData, bank);
+      }
+      
       this.toggleModal();
     }
   }

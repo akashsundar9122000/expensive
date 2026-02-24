@@ -13,6 +13,19 @@ module.exports = async (req, res) => {
     const userId = userResult.rows[0].id;
 
     try {
+        // Ensure investments table exists (idempotent)
+        await query(`
+            CREATE TABLE IF NOT EXISTS investments (
+                id BIGSERIAL PRIMARY KEY,
+                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                type TEXT NOT NULL,
+                name TEXT NOT NULL,
+                amount NUMERIC NOT NULL,
+                return_pct NUMERIC,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            )
+        `);
+
         if (req.method === 'GET') {
             const result = await query(
                 'SELECT id, type, name, amount, return_pct as "returnPct" FROM investments WHERE user_id = $1',
@@ -40,6 +53,6 @@ module.exports = async (req, res) => {
         return res.status(405).json({ error: 'Method not allowed' });
     } catch (err) {
         console.error('Investments error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        return res.status(500).json({ error: 'Internal server error' });
     }
 };
