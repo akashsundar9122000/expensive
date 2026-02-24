@@ -7,10 +7,12 @@ module.exports = async (req, res) => {
     cors(res);
     if (req.method === 'OPTIONS') return res.status(200).end();
 
-    const path = req.url.split('?')[0];
+    const path = String(req.url || '').split('?')[0].toLowerCase();
+    const action = String(req.query?.action || '').toLowerCase();
+    const isAction = (...names) => names.some((name) => action === name || path.endsWith(`/${name}`));
 
     // ROUTING: /api/auth/login
-    if (path.endsWith('/login') && req.method === 'POST') {
+    if (isAction('login') && req.method === 'POST') {
         try {
             const { email, password } = req.body;
             if (!email || !password) return res.status(400).json({ error: 'Missing fields' });
@@ -36,7 +38,7 @@ module.exports = async (req, res) => {
     }
 
     // ROUTING: /api/auth/register
-    if (path.endsWith('/register') && req.method === 'POST') {
+    if (isAction('register') && req.method === 'POST') {
         try {
             const { name, email, password } = req.body;
             if (!name || !email || !password) return res.status(400).json({ error: 'Missing fields' });
@@ -66,7 +68,7 @@ module.exports = async (req, res) => {
     }
 
     // ROUTING: /api/auth/google
-    if (path.endsWith('/google') && req.method === 'POST') {
+    if (isAction('google') && req.method === 'POST') {
         try {
             const { idToken } = req.body;
             if (!idToken) return res.status(400).json({ error: 'Missing Google token' });
@@ -112,7 +114,7 @@ module.exports = async (req, res) => {
     }
 
     // ROUTING: /api/auth/forgot-password
-    if (path.endsWith('/forgot-password') && req.method === 'POST') {
+    if (isAction('forgot-password') && req.method === 'POST') {
         try {
             const { email, newPassword } = req.body;
             if (!email || !newPassword || String(newPassword).trim().length < 6) {
@@ -135,7 +137,7 @@ module.exports = async (req, res) => {
     }
 
     // ROUTING: /api/auth/profile
-    if (path.endsWith('/profile')) {
+    if (isAction('profile')) {
         const email = getEmailFromRequest(req);
         if (!email) return res.status(401).json({ error: 'Unauthorized' });
 
