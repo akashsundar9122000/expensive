@@ -2,6 +2,8 @@ package com.expensify.backend.controller;
 
 import com.expensify.backend.dto.AuthenticationRequest;
 import com.expensify.backend.dto.AuthenticationResponse;
+import com.expensify.backend.dto.ForgotPasswordRequest;
+import com.expensify.backend.dto.GoogleLoginRequest;
 import com.expensify.backend.dto.RegisterRequest;
 import com.expensify.backend.service.AuthService;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +26,25 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<AuthenticationResponse> authenticate(@RequestBody AuthenticationRequest request) {
         return ResponseEntity.ok(service.authenticate(request));
+    }
+
+    @PostMapping("/google")
+    public ResponseEntity<AuthenticationResponse> authenticateWithGoogle(@RequestBody GoogleLoginRequest request) {
+        try {
+            return ResponseEntity.ok(service.authenticateWithGoogle(request));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Map<String, String>> forgotPassword(@RequestBody ForgotPasswordRequest request) {
+        try {
+            service.forgotPassword(request);
+            return ResponseEntity.ok(Map.of("message", "Password updated successfully"));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of("message", ex.getMessage()));
+        }
     }
 
     @PutMapping("/profile")

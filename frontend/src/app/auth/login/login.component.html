@@ -31,21 +31,50 @@
             </div>
 
             <p class="error-text" *ngIf="errorMessage">{{ errorMessage }}</p>
+            <p class="success-text" *ngIf="infoMessage">{{ infoMessage }}</p>
 
             <div class="form-options">
                 <label class="checkbox-container">
-                    <input type="checkbox">
+                    <input type="checkbox" name="rememberPassword" [(ngModel)]="rememberPassword">
                     <span class="checkmark"></span>
                     Remember me
                 </label>
-                <a href="#" class="forgot-password">Forgot password?</a>
+                <a href="#" class="forgot-password" (click)="toggleForgotPassword($event)">Forgot password?</a>
             </div>
 
-            <button type="submit" class="auth-btn">Sign In</button>
+            <div class="forgot-password-form" *ngIf="showForgotPasswordForm">
+                <div class="form-group">
+                    <label for="forgotEmail">Email</label>
+                    <div class="input-wrapper">
+                        <i class="ph ph-envelope"></i>
+                        <input type="email" id="forgotEmail" name="forgotEmail" [(ngModel)]="forgotEmail" placeholder="Enter your email" required>
+                    </div>
+                </div>
 
-            <button type="button" class="google-btn">
+                <div class="form-group">
+                    <label for="forgotNewPassword">New password</label>
+                    <div class="input-wrapper">
+                        <i class="ph ph-lock"></i>
+                        <input type="password" id="forgotNewPassword" name="forgotNewPassword" [(ngModel)]="forgotNewPassword" placeholder="Create a new password" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="forgotConfirmPassword">Confirm new password</label>
+                    <div class="input-wrapper">
+                        <i class="ph ph-lock"></i>
+                        <input type="password" id="forgotConfirmPassword" name="forgotConfirmPassword" [(ngModel)]="forgotConfirmPassword" placeholder="Re-enter new password" required>
+                    </div>
+                </div>
+
+                <button type="button" class="google-btn" (click)="submitForgotPassword()">Reset Password</button>
+            </div>
+
+            <button type="submit" class="auth-btn" [disabled]="isSubmitting">{{ isSubmitting ? 'Signing in...' : 'Sign In' }}</button>
+
+            <button type="button" class="google-btn" (click)="onGoogleSignIn()" [disabled]="isGoogleSubmitting">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
-                Sign in with Google
+                {{ isGoogleSubmitting ? 'Opening Google...' : 'Sign in with Google' }}
             </button>
         </form>
 

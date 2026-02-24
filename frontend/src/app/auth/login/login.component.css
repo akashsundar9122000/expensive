@@ -137,6 +137,22 @@
     font-weight: 600;
 }
 
+.forgot-password-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.error-text {
+    color: var(--danger-red);
+    font-size: 14px;
+}
+
+.success-text {
+    color: var(--success-green);
+    font-size: 14px;
+}
+
 .auth-btn {
     background: linear-gradient(135deg, var(--primary-blue), var(--investment-purple));
     color: white;
@@ -152,6 +168,12 @@
 .auth-btn:hover {
     transform: translateY(-1px);
     box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3);
+}
+
+.auth-btn:disabled,
+.google-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
 }
 
 .google-btn {

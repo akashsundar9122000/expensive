@@ -86,20 +86,55 @@ export class ExpenseService {
     getBanks(): Observable<Bank[]> { return this.banks.asObservable(); }
 
     addBank(bankName: string, balance?: number | null) {
-        const encodedName = encodeURIComponent(bankName);
-        const balanceParam = balance != null && !isNaN(balance) ? `&balance=${encodeURIComponent(balance)}` : '';
-        this.http.post<any>(`${this.apiUrl}/banks?name=${encodedName}${balanceParam}`, {}).subscribe({
+        const trimmedName = (bankName || '').trim();
+        if (!trimmedName) {
+            console.error('Failed to add bank: bank name is required');
+            return;
+        }
+
+        const parsedBalance = balance != null && !isNaN(balance as number) ? Number(balance) : 0;
+        const payload = { name: trimmedName, balance: parsedBalance };
+
+        this.http.post<any>(`${this.apiUrl}/banks`, payload).subscribe({
             next: () => { this.refreshAllData(); },
-            error: (err) => { console.error('Failed to add bank:', err); }
+            error: (primaryErr) => {
+                const encodedName = encodeURIComponent(trimmedName);
+                const balanceParam = `&balance=${encodeURIComponent(parsedBalance)}`;
+                this.http.post<any>(`${this.apiUrl}/banks?name=${encodedName}${balanceParam}`, {}).subscribe({
+                    next: () => { this.refreshAllData(); },
+                    error: (fallbackErr) => {
+                        console.error('Failed to add bank (body + query fallback):', { primaryErr, fallbackErr });
+                    }
+                });
+            }
         });
     }
 
     updateBank(id: number, name: string, balance?: number | null) {
-        const encodedName = encodeURIComponent(name);
-        const balanceParam = balance != null && !isNaN(balance) ? `&balance=${encodeURIComponent(balance)}` : '';
-        this.http.put<any>(`${this.apiUrl}/banks?id=${id}&name=${encodedName}${balanceParam}`, {}).subscribe({
+        const trimmedName = (name || '').trim();
+        if (!id || !trimmedName) {
+            console.error('Failed to update bank: bank id and name are required');
+            return;
+        }
+
+        const parsedBalance = balance != null && !isNaN(balance as number) ? Number(balance) : null;
+        const payload: any = { id, name: trimmedName };
+        if (parsedBalance !== null) {
+            payload.balance = parsedBalance;
+        }
+
+        this.http.put<any>(`${this.apiUrl}/banks`, payload).subscribe({
             next: () => { this.refreshAllData(); },
-            error: (err) => { console.error('Failed to update bank:', err); }
+            error: (primaryErr) => {
+                const encodedName = encodeURIComponent(trimmedName);
+                const balanceParam = parsedBalance !== null ? `&balance=${encodeURIComponent(parsedBalance)}` : '';
+                this.http.put<any>(`${this.apiUrl}/banks?id=${id}&name=${encodedName}${balanceParam}`, {}).subscribe({
+                    next: () => { this.refreshAllData(); },
+                    error: (fallbackErr) => {
+                        console.error('Failed to update bank (body + query fallback):', { primaryErr, fallbackErr });
+                    }
+                });
+            }
         });
     }
 

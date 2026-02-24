@@ -1,6 +1,19 @@
 const { query } = require('../_lib/db');
 const { getEmailFromRequest, cors } = require('../_lib/auth');
 
+function readParam(req, key) {
+    if (req.query && req.query[key] !== undefined) return req.query[key];
+    if (req.body && req.body[key] !== undefined) return req.body[key];
+    try {
+        const parsed = new URL(req.url, 'http://localhost');
+        const value = parsed.searchParams.get(key);
+        if (value !== null) return value;
+    } catch (_) {
+        // ignore URL parsing errors
+    }
+    return undefined;
+}
+
 module.exports = async (req, res) => {
     cors(res);
     if (req.method === 'OPTIONS') return res.status(200).end();
@@ -19,11 +32,12 @@ module.exports = async (req, res) => {
         }
 
         if (req.method === 'POST') {
-            const name = req.query.name || req.body?.name;
-            const balanceParam = req.query.balance ?? req.body?.balance;
-            const balance = balanceParam !== undefined && balanceParam !== null && balanceParam !== ''
+            const name = readParam(req, 'name');
+            const balanceParam = readParam(req, 'balance');
+            const parsedBalance = balanceParam !== undefined && balanceParam !== null && balanceParam !== ''
                 ? parseFloat(balanceParam)
                 : 0;
+            const balance = Number.isFinite(parsedBalance) ? parsedBalance : 0;
             if (!name) return res.status(400).json({ error: 'Bank name required' });
             const result = await query(
                 'INSERT INTO bank_accounts (user_id, name, balance) VALUES ($1, $2, $3) RETURNING id, name, balance',
@@ -33,12 +47,15 @@ module.exports = async (req, res) => {
         }
 
         if (req.method === 'PUT') {
-            const id = req.query.id || req.body?.id;
-            const name = req.query.name || req.body?.name;
-            const balanceParam = req.query.balance ?? req.body?.balance;
-            const balance = balanceParam !== undefined && balanceParam !== null && balanceParam !== ''
+            const id = readParam(req, 'id');
+            const name = readParam(req, 'name');
+            const balanceParam = readParam(req, 'balance');
+            const parsedBalance = balanceParam !== undefined && balanceParam !== null && balanceParam !== ''
                 ? parseFloat(balanceParam)
                 : null;
+            const balance = parsedBalance === null
+                ? null
+                : (Number.isFinite(parsedBalance) ? parsedBalance : null);
             if (!id || !name) return res.status(400).json({ error: 'Bank id and name required' });
             const result = await query(
                 'UPDATE bank_accounts SET name = $1, balance = COALESCE($2, balance) WHERE id = $3 AND user_id = $4 RETURNING id, name, balance',
@@ -49,7 +66,7 @@ module.exports = async (req, res) => {
         }
 
         if (req.method === 'DELETE') {
-            const id = req.query.id;
+            const id = readParam(req, 'id');
             if (!id) return res.status(400).json({ error: 'Bank id required' });
 
             const countResult = await query('SELECT COUNT(*)::int AS count FROM bank_accounts WHERE user_id = $1', [userId]);

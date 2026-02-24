@@ -12,10 +12,11 @@ export class ThemeService {
         const saved = localStorage.getItem('darkMode');
         if (saved === 'true') {
             this.enableDark();
-        } else if (saved === null) {
-            // Check system preference
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            if (prefersDark) this.enableDark();
+        } else if (saved === 'false') {
+            this.enableLight();
+        } else {
+            // First launch default: dark mode
+            this.enableDark();
         }
     }
 

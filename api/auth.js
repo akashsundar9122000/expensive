@@ -65,6 +65,75 @@ module.exports = async (req, res) => {
         }
     }
 
+    // ROUTING: /api/auth/google
+    if (path.endsWith('/google') && req.method === 'POST') {
+        try {
+            const { idToken } = req.body;
+            if (!idToken) return res.status(400).json({ error: 'Missing Google token' });
+
+            const verifyResponse = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+            if (!verifyResponse.ok) return res.status(400).json({ error: 'Invalid Google token' });
+
+            const googleData = await verifyResponse.json();
+            const email = (googleData.email || '').toLowerCase().trim();
+            if (!email) return res.status(400).json({ error: 'Email missing in Google profile' });
+
+            let userResult = await query('SELECT id, name, email, password, avatar_url FROM users WHERE LOWER(email) = $1', [email]);
+
+            if (userResult.rows.length === 0) {
+                const name = googleData.name || email.split('@')[0] || 'User';
+                const avatarUrl = googleData.picture || null;
+                const userId = randomUUID();
+                const generatedPassword = await bcrypt.hash(randomUUID(), 10);
+
+                userResult = await query(
+                    'INSERT INTO users (id, name, email, password, avatar_url) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, email, password, avatar_url',
+                    [userId, name, email, generatedPassword, avatarUrl]
+                );
+
+                await query(
+                    'INSERT INTO user_preferences (user_id, goal_name, goal_required, goal_collected, total_investment, invest_amount) VALUES ($1, $2, $3, $4, $5, $6)',
+                    [userId, 'Savings Goal', 100000, 0, 0, 0]
+                );
+            }
+
+            const user = userResult.rows[0];
+            const token = generateToken(user.email);
+            return res.status(200).json({
+                token,
+                name: user.name,
+                email: user.email,
+                avatarUrl: user.avatar_url
+            });
+        } catch (err) {
+            console.error('Google auth error:', err);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+    }
+
+    // ROUTING: /api/auth/forgot-password
+    if (path.endsWith('/forgot-password') && req.method === 'POST') {
+        try {
+            const { email, newPassword } = req.body;
+            if (!email || !newPassword || String(newPassword).trim().length < 6) {
+                return res.status(400).json({ error: 'Email and valid new password are required' });
+            }
+
+            const normalizedEmail = String(email).toLowerCase().trim();
+            const userResult = await query('SELECT id FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
+
+            if (userResult.rows.length > 0) {
+                const hashedPassword = await bcrypt.hash(String(newPassword).trim(), 10);
+                await query('UPDATE users SET password = $1 WHERE LOWER(email) = $2', [hashedPassword, normalizedEmail]);
+            }
+
+            return res.status(200).json({ message: 'Password updated successfully' });
+        } catch (err) {
+            console.error('Forgot password error:', err);
+            return res.status(500).json({ error: 'Internal server error' });
+        }
+    }
+
     // ROUTING: /api/auth/profile
     if (path.endsWith('/profile')) {
         const email = getEmailFromRequest(req);
