@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { BehaviorSubject, Observable, forkJoin, tap, take, catchError, of, throwError } from 'rxjs';
+import { BehaviorSubject, Observable, tap, take, catchError, of, throwError, firstValueFrom } from 'rxjs';
 import { Transaction, Subscription, Investment, DashboardStats, User, Budget, Bank } from './models';
 import { AuthService } from './auth.service';
 
@@ -16,6 +16,8 @@ export class ExpenseService {
     private banks = new BehaviorSubject<Bank[]>([]);
     private user = new BehaviorSubject<User | null>(null);
     private apiUrl = '/api/expenses';
+    private isRefreshing = false;
+    private refreshQueued = false;
 
     constructor(private authService: AuthService, private http: HttpClient) {
         this.authService.getCurrentUser().subscribe(user => {
@@ -40,31 +42,70 @@ export class ExpenseService {
         };
     }
 
+    private normalizeInvestments(investments: Investment[]): Investment[] {
+        return (investments || []).map((investment) => ({
+            ...investment,
+            amount: Number(investment.amount || 0),
+            returnPct: investment.returnPct === undefined || investment.returnPct === null
+                ? undefined
+                : Number(investment.returnPct)
+        }));
+    }
+
     refreshAllData() {
-        forkJoin([
-            this.authService.getCurrentUser().pipe(take(1)),
-            this.http.get<Transaction[]>(`${this.apiUrl}/transactions`).pipe(catchError(() => of([]))),
-            this.http.get<Subscription[]>(`${this.apiUrl}/subscriptions`).pipe(catchError(() => of([]))),
-            this.http.get<Investment[]>(`${this.apiUrl}/investments`).pipe(catchError(() => of([]))),
-            this.http.get<Budget[]>(`${this.apiUrl}/budgets`).pipe(catchError(() => of([]))),
-            this.http.get<DashboardStats>(`${this.apiUrl}/stats`).pipe(catchError(() => of(this.getDefaultStats()))),
+        if (this.isRefreshing) {
+            this.refreshQueued = true;
+            return;
+        }
+
+        this.isRefreshing = true;
+        this.loadAllDataSequentially()
+            .catch((err) => {
+                console.error('Failed to refresh dashboard data:', err);
+            })
+            .finally(() => {
+                this.isRefreshing = false;
+                if (this.refreshQueued) {
+                    this.refreshQueued = false;
+                    this.refreshAllData();
+                }
+            });
+    }
+
+    private async loadAllDataSequentially() {
+        const user = await firstValueFrom(this.authService.getCurrentUser().pipe(take(1)));
+        const transactions = await firstValueFrom(
+            this.http.get<Transaction[]>(`${this.apiUrl}/transactions`).pipe(catchError(() => of([])))
+        );
+        const subscriptions = await firstValueFrom(
+            this.http.get<Subscription[]>(`${this.apiUrl}/subscriptions`).pipe(catchError(() => of([])))
+        );
+        const investments = await firstValueFrom(
+            this.http.get<Investment[]>(`${this.apiUrl}/investments`).pipe(catchError(() => of([])))
+        );
+        const budgets = await firstValueFrom(
+            this.http.get<Budget[]>(`${this.apiUrl}/budgets`).pipe(catchError(() => of([])))
+        );
+        const statsData = await firstValueFrom(
+            this.http.get<DashboardStats>(`${this.apiUrl}/stats`).pipe(catchError(() => of(this.getDefaultStats())))
+        );
+        const bankList = await firstValueFrom(
             this.http.get<Bank[]>(`${this.apiUrl}/banks`).pipe(catchError(() => of([])))
-        ]).subscribe(([u, t, s, i, b, statsData, banksData]) => {
-            const user = u as User | null;
-            const bankList = banksData as Bank[];
-            this.transactions.next(t as Transaction[]);
-            this.subscriptions.next(s as Subscription[]);
-            this.investments.next(i as Investment[]);
-            this.budgets.next(b as Budget[]);
-            this.stats.next(statsData as DashboardStats);
-            this.banks.next(bankList);
-            // Keep user.bankAccounts in sync so dashboard/all-expenses dropdowns stay populated
-            if (user) {
-                this.user.next({ ...user, bankAccounts: bankList.map(bk => bk.name) });
-            } else {
-                this.user.next(user);
-            }
-        });
+        );
+
+        const normalizedInvestments = this.normalizeInvestments(investments);
+        this.transactions.next(transactions);
+        this.subscriptions.next(subscriptions);
+        this.investments.next(normalizedInvestments);
+        this.budgets.next(budgets);
+        this.stats.next(statsData);
+        this.banks.next(bankList);
+
+        if (user) {
+            this.user.next({ ...user, bankAccounts: bankList.map(bk => bk.name) });
+        } else {
+            this.user.next(user);
+        }
     }
 
     private resetData() {
@@ -255,8 +296,14 @@ export class ExpenseService {
         );
     }
 
+    updateInvestment(id: number, investment: Omit<Investment, 'id'>): Observable<Investment> {
+        return this.http.put<Investment>(`${this.apiUrl}/investments`, { id, ...investment }).pipe(
+            tap(() => { this.refreshAllData(); })
+        );
+    }
+
     deleteInvestment(id: number) {
-        this.http.delete(`${this.apiUrl}/investments/${id}`).subscribe({
+        this.http.delete(`${this.apiUrl}/investments?id=${id}`).subscribe({
             next: () => { this.refreshAllData(); },
             error: (err) => { console.error('Failed to delete investment:', err); }
         });
