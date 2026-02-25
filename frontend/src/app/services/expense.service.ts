@@ -3,6 +3,7 @@ import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { BehaviorSubject, Observable, tap, take, catchError, of, throwError, firstValueFrom } from 'rxjs';
 import { Transaction, Subscription, Investment, DashboardStats, User, Budget, Bank } from './models';
 import { AuthService } from './auth.service';
+import { environment } from '../../environments/environment';
 
 @Injectable({
     providedIn: 'root'
@@ -15,7 +16,7 @@ export class ExpenseService {
     private budgets = new BehaviorSubject<Budget[]>([]);
     private banks = new BehaviorSubject<Bank[]>([]);
     private user = new BehaviorSubject<User | null>(null);
-    private apiUrl = '/api/expenses';
+    private apiUrl = `${environment.apiUrl}/api/expenses`;
     private isRefreshing = false;
     private refreshQueued = false;
 

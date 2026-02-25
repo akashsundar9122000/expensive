@@ -3,13 +3,14 @@ import { BehaviorSubject, Observable, map, tap } from 'rxjs';
 import { User } from './models';
 import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
+import { environment } from '../../environments/environment';
 
 @Injectable({
     providedIn: 'root'
 })
 export class AuthService {
     private currentUserSubject = new BehaviorSubject<User | null>(null);
-    private apiUrl = '/api/auth';
+    private apiUrl = `${environment.apiUrl}/api/auth`;
     private rememberedLoginKey = 'rememberedLogin';
 
     constructor(private router: Router, private http: HttpClient) {

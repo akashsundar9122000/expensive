@@ -3,45 +3,14 @@
     "buildCommand": "cd frontend && npm run build",
     "outputDirectory": "frontend/dist/expense-tracker/browser",
     "installCommand": "npm install && cd frontend && npm install",
-    "routes": [
+    "rewrites": [
         {
-            "src": "/api/health",
-            "dest": "/api/health.js"
+            "source": "/api/(.*)",
+            "destination": "https://srv-d6f5vj14tr6s73bn6k2g.onrender.com/api/$1"
         },
         {
-            "src": "/api/auth/(.*)",
-            "dest": "/api/auth.js?action=$1"
-        },
-        {
-            "src": "/api/expenses/(stats|budgets|banks|preferences)",
-            "dest": "/api/expenses/$1.js"
-        },
-        {
-            "src": "/api/expenses/transactions/(.+)",
-            "dest": "/api/expenses/transactions.js?id=$1"
-        },
-        {
-            "src": "/api/expenses/subscriptions/(.+)",
-            "dest": "/api/expenses/subscriptions.js?id=$1"
-        },
-        {
-            "src": "/api/expenses/investments/(.+)",
-            "dest": "/api/expenses/investments.js?id=$1"
-        },
-        {
-            "src": "/api/expenses/(transactions|subscriptions|investments)",
-            "dest": "/api/expenses/$1.js"
-        },
-        {
-            "src": "/api/(.*)",
-            "dest": "/api/$1"
-        },
-        {
-            "handle": "filesystem"
-        },
-        {
-            "src": "/(.*)",
-            "dest": "/index.html"
+            "source": "/(.*)",
+            "destination": "/index.html"
         }
     ]
 }
