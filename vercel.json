@@ -6,7 +6,7 @@
     "rewrites": [
         {
             "source": "/api/(.*)",
-            "destination": "https://srv-d6f5vj14tr6s73bn6k2g.onrender.com/api/$1"
+            "destination": "https://expensive-backend-docker.onrender.com/api/$1"
         },
         {
             "source": "/(.*)",
