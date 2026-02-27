@@ -4,7 +4,7 @@ import { ReactiveFormsModule, FormsModule, FormBuilder, FormGroup, Validators } 
 import { ExpenseService } from '../services/expense.service';
 import { AuthService } from '../services/auth.service';
 import { NotificationService } from '../services/notification.service';
-import { Transaction, Subscription, DashboardStats, User, Budget, Bank } from '../services/models';
+import { Transaction, Subscription, DashboardStats, User, Budget, Bank, Sip } from '../services/models';
 import { Observable, take, Subject, takeUntil, combineLatest } from 'rxjs';
 import { SidebarComponent } from '../shared/sidebar/sidebar.component';
 import { NotificationPanelComponent } from '../shared/notification-panel/notification-panel.component';
@@ -33,6 +33,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     stats$!: Observable<DashboardStats>;
     transactions$!: Observable<Transaction[]>;
     subscriptions$!: Observable<Subscription[]>;
+    sips$!: Observable<Sip[]>;
     budgets$!: Observable<Budget[]>;
     banks$!: Observable<Bank[]>;
     unreadCount$!: Observable<number>;
@@ -57,6 +58,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     editingBudget: { category: string; limitAmount: number } | null = null;
     deletingBudgetCategory: string | null = null;
     notifiedBudgets: Set<string> = new Set();
+    dueTomorrowSips: Sip[] = [];
 
     expenseForm!: FormGroup;
 
@@ -76,6 +78,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.stats$ = this.expenseService.getStats();
         this.transactions$ = this.expenseService.getTransactions();
         this.subscriptions$ = this.expenseService.getSubscriptions();
+        this.sips$ = this.expenseService.getSips();
         this.budgets$ = this.expenseService.getBudgets();
         this.banks$ = this.expenseService.getBanks();
         this.unreadCount$ = this.notificationService.getUnreadCount();
@@ -106,6 +109,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
                 }
                 this.cdr.markForCheck();
             });
+
+        this.sips$.pipe(takeUntil(this.destroy$)).subscribe((sips) => {
+            this.dueTomorrowSips = this.getSipsDueTomorrow(sips || []);
+            this.checkSipReminders(sips || []);
+            this.cdr.markForCheck();
+        });
 
         this.banks$.pipe(takeUntil(this.destroy$)).subscribe(banks => {
             if (banks.length === 0) {
@@ -341,6 +350,98 @@ export class DashboardComponent implements OnInit, OnDestroy {
                 status: percent > 90 ? 'danger' : percent > 75 ? 'warning' : 'success'
             };
         });
+    }
+
+    private checkSipReminders(sips: Sip[]): void {
+        if (!Array.isArray(sips) || sips.length === 0) {
+            return;
+        }
+
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        for (const sip of sips) {
+            const sipId = Number(sip.id);
+            const sipDay = Number(sip.sipDay);
+            const monthlyAmount = Number(sip.monthlyAmount);
+            const investmentName = String(sip.investmentName || sip.type || 'SIP').trim();
+
+            if (!Number.isInteger(sipId) || sipId <= 0) {
+                continue;
+            }
+
+            if (!Number.isInteger(sipDay) || sipDay < 1 || sipDay > 31) {
+                continue;
+            }
+
+            const nextDueDate = this.getNextSipDueDate(sipDay, todayStart);
+            const reminderDate = new Date(nextDueDate);
+            reminderDate.setDate(reminderDate.getDate() - 1);
+            reminderDate.setHours(0, 0, 0, 0);
+
+            if (reminderDate.getTime() !== todayStart.getTime()) {
+                continue;
+            }
+
+            const categoryKey = `sip-reminder-${sipId}`;
+            if (this.notificationService.hasNotificationToday(categoryKey, 'info')) {
+                continue;
+            }
+
+            const dueDateLabel = nextDueDate.toLocaleDateString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+            });
+
+            this.notificationService.addNotification({
+                title: `SIP Due Tomorrow: ${investmentName}`,
+                message: `₹${monthlyAmount.toFixed(2)} for ${investmentName} is scheduled on ${dueDateLabel} (Day ${sipDay}).`,
+                type: 'info',
+                icon: 'ph-calendar-check',
+                read: false,
+                category: categoryKey,
+                amount: monthlyAmount
+            });
+        }
+    }
+
+    private getSipsDueTomorrow(sips: Sip[]): Sip[] {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        return (sips || [])
+            .filter((sip) => {
+                const sipDay = Number(sip.sipDay);
+                if (!Number.isInteger(sipDay) || sipDay < 1 || sipDay > 31) {
+                    return false;
+                }
+
+                const nextDueDate = this.getNextSipDueDate(sipDay, todayStart);
+                const reminderDate = new Date(nextDueDate);
+                reminderDate.setDate(reminderDate.getDate() - 1);
+                reminderDate.setHours(0, 0, 0, 0);
+                return reminderDate.getTime() === todayStart.getTime();
+            })
+            .sort((a, b) => Number(b.monthlyAmount || 0) - Number(a.monthlyAmount || 0));
+    }
+
+    private getNextSipDueDate(sipDay: number, todayStart: Date): Date {
+        const dueThisMonth = this.createClampedDate(todayStart.getFullYear(), todayStart.getMonth(), sipDay);
+        if (dueThisMonth.getTime() >= todayStart.getTime()) {
+            return dueThisMonth;
+        }
+
+        const nextMonthBase = new Date(todayStart.getFullYear(), todayStart.getMonth() + 1, 1);
+        return this.createClampedDate(nextMonthBase.getFullYear(), nextMonthBase.getMonth(), sipDay);
+    }
+
+    private createClampedDate(year: number, month: number, dayOfMonth: number): Date {
+        const lastDay = new Date(year, month + 1, 0).getDate();
+        const clampedDay = Math.min(dayOfMonth, lastDay);
+        const date = new Date(year, month, clampedDay);
+        date.setHours(0, 0, 0, 0);
+        return date;
     }
 
     saveBudgetEdit(category: string) {

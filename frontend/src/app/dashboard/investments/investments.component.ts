@@ -1,10 +1,11 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ExpenseService } from '../../services/expense.service';
-import { Investment, DashboardStats, User } from '../../services/models';
+import { Investment, Sip, DashboardStats, User } from '../../services/models';
 import { BehaviorSubject, Observable, combineLatest, map } from 'rxjs';
 import { SidebarComponent } from '../../shared/sidebar/sidebar.component';
 import { FormsModule } from '@angular/forms';
+import { DeleteConfirmModalComponent } from '../../shared/delete-confirm-modal/delete-confirm-modal.component';
 
 const INVESTMENT_TYPES = [
   { value: 'Mutual Fund', icon: 'ph-chart-pie', color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)' },
@@ -35,6 +36,13 @@ interface InvestmentForm {
   returnPct: number | null;
 }
 
+interface SipForm {
+  type: string;
+  investmentName: string;
+  monthlyAmount: number | null;
+  sipDay: number | null;
+}
+
 const DEFAULT_NEW_INVESTMENT: InvestmentForm = {
   type: 'Mutual Fund',
   name: '',
@@ -42,10 +50,17 @@ const DEFAULT_NEW_INVESTMENT: InvestmentForm = {
   returnPct: null
 };
 
+const DEFAULT_NEW_SIP: SipForm = {
+  type: 'Mutual Fund',
+  investmentName: '',
+  monthlyAmount: null,
+  sipDay: null
+};
+
 @Component({
   selector: 'app-investments',
   standalone: true,
-  imports: [CommonModule, SidebarComponent, FormsModule],
+  imports: [CommonModule, SidebarComponent, FormsModule, DeleteConfirmModalComponent],
   template: `
     <main class="dashboard-layout" *ngIf="{
       user: user$ | async,
@@ -53,7 +68,8 @@ const DEFAULT_NEW_INVESTMENT: InvestmentForm = {
       allInvestments: investments$ | async,
       investments: filteredInvestments$ | async,
       investmentTypes: investmentTypeOptions$ | async,
-      insights: insights$ | async
+      insights: insights$ | async,
+      sips: sips$ | async
     } as data">
       <app-sidebar [isMobileOpen]="isMobileMenuOpen" (closeMobile)="isMobileMenuOpen = false"></app-sidebar>
 
@@ -150,7 +166,7 @@ const DEFAULT_NEW_INVESTMENT: InvestmentForm = {
                 <button class="icon-action" (click)="openEditModal(inv)" aria-label="Edit investment">
                   <i class="ph ph-pencil-simple"></i>
                 </button>
-                <button class="delete-btn" (click)="deleteInvestment(inv.id)">
+                <button class="delete-btn" (click)="openDeleteModal('investment', inv.id, inv.name)">
                   <i class="ph ph-trash"></i>
                 </button>
               </div>
@@ -182,6 +198,42 @@ const DEFAULT_NEW_INVESTMENT: InvestmentForm = {
               </div>
             </div>
           </div>
+
+          <!-- SIP Section -->
+          <div class="card" style="padding: 28px; margin-top: 24px;">
+            <div class="flex-between" style="margin-bottom: 20px;">
+              <h3>SIP Plans</h3>
+              <button class="primary-btn" (click)="openAddSipModal()">
+                <i class="ph ph-plus"></i> Add SIP
+              </button>
+            </div>
+
+            <div *ngIf="data.sips && data.sips.length > 0">
+              <div class="sip-row" *ngFor="let sip of data.sips">
+                <div class="inv-type-icon" [style.background]="getColor(sip.type).bg" [style.color]="getColor(sip.type).color">
+                  <i class="ph" [ngClass]="getColor(sip.type).icon"></i>
+                </div>
+                <div class="inv-details">
+                  <h4>{{ sip.investmentName || sip.type }}</h4>
+                  <span class="type-badge" [style.background]="getColor(sip.type).bg" [style.color]="getColor(sip.type).color">
+                    {{ sip.type }} • Day {{ sip.sipDay }}
+                  </span>
+                </div>
+                <div class="inv-amount">₹{{ sip.monthlyAmount | number:'1.2-2' }}/mo</div>
+                <button class="icon-action" (click)="openEditSipModal(sip)" aria-label="Edit SIP">
+                  <i class="ph ph-pencil-simple"></i>
+                </button>
+                <button class="delete-btn" (click)="openDeleteModal('sip', sip.id, sip.investmentName || sip.type)">
+                  <i class="ph ph-trash"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="empty-state" *ngIf="data.sips && data.sips.length === 0">
+              <i class="ph ph-calendar"></i>
+              <p>No SIP plans yet. Add your first SIP!</p>
+            </div>
+          </div>
         </div>
       </div>
     </main>
@@ -194,15 +246,11 @@ const DEFAULT_NEW_INVESTMENT: InvestmentForm = {
           <button class="close-btn" (click)="closeModal()"><i class="ph ph-x"></i></button>
         </div>
 
-        <div class="investment-types-grid">
-          <div class="type-option" *ngFor="let t of investmentTypes"
-            [class.selected]="newInvestment.type === t.value"
-            (click)="newInvestment.type = t.value">
-            <div class="type-icon" [style.background]="t.bg" [style.color]="t.color">
-              <i class="ph" [ngClass]="t.icon"></i>
-            </div>
-            <span>{{ t.value }}</span>
-          </div>
+        <div class="form-group">
+          <label>Investment</label>
+          <select [(ngModel)]="newInvestment.type">
+            <option *ngFor="let t of investmentTypes" [value]="t.value">{{ t.value }}</option>
+          </select>
         </div>
 
         <div class="form-group">
@@ -225,6 +273,59 @@ const DEFAULT_NEW_INVESTMENT: InvestmentForm = {
         </button>
       </div>
     </div>
+
+    <!-- Add/Edit SIP Modal -->
+    <div class="modal-overlay" *ngIf="showSipModal" (click)="showSipModal = false">
+      <div class="modal-card" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>{{ editingSipId ? 'Edit SIP' : 'Add SIP' }}</h3>
+          <button class="close-btn" (click)="closeSipModal()"><i class="ph ph-x"></i></button>
+        </div>
+
+        <div class="form-group">
+          <label>Investment</label>
+          <select [(ngModel)]="newSip.type">
+            <option *ngFor="let t of investmentTypes" [value]="t.value">{{ t.value }}</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>{{ getSipInvestmentNameLabel(newSip.type) }}</label>
+          <input type="text" [(ngModel)]="newSip.investmentName" [placeholder]="getSipInvestmentNamePlaceholder(newSip.type)">
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+          <div class="form-group">
+            <label>Monthly Amount (₹)</label>
+            <input type="number" [(ngModel)]="newSip.monthlyAmount" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label>SIP Date (1-31)</label>
+            <input type="number" min="1" max="31" [(ngModel)]="newSip.sipDay" placeholder="e.g. 5">
+          </div>
+        </div>
+
+        <button class="primary-btn" style="width: 100%; justify-content: center; margin-top: 8px;" (click)="saveSip()"
+          [disabled]="!canSaveSip() || isSavingSip">
+          {{ isSavingSip ? 'Saving...' : (editingSipId ? 'Update SIP' : 'Save SIP') }}
+        </button>
+      </div>
+    </div>
+
+    <app-delete-confirm-modal
+      [visible]="showDeleteModal"
+      [title]="'Confirm Delete'"
+      [message]="'Delete ' + (deleteTargetType === 'sip' ? 'SIP' : 'investment') + ' ' + (deleteTargetName || '') + '?'"
+      [confirmText]="'Delete'"
+      [processingText]="'Deleting...'"
+      [requirePassword]="true"
+      [password]="deletePassword"
+      (passwordChange)="deletePassword = $event"
+      [isProcessing]="isDeleting"
+      [errorMessage]="deleteError"
+      (closed)="closeDeleteModal()"
+      (confirmed)="confirmDelete()">
+    </app-delete-confirm-modal>
   `,
   styles: [`
     .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 28px; }
@@ -238,6 +339,8 @@ const DEFAULT_NEW_INVESTMENT: InvestmentForm = {
 
     .investment-row { display: flex; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border-light); transition: background var(--transition-fast); }
     .investment-row:hover { background: var(--bg-hover); margin: 0 -12px; padding: 14px 12px; border-radius: 12px; }
+    .sip-row { display: flex; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border-light); transition: background var(--transition-fast); }
+    .sip-row:hover { background: var(--bg-hover); margin: 0 -12px; padding: 14px 12px; border-radius: 12px; }
     .inv-type-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
     .inv-details { flex: 1; }
     .inv-details h4 { font-size: 15px; margin-bottom: 4px; }
@@ -331,17 +434,29 @@ export class InvestmentsComponent implements OnInit {
   user$!: Observable<User | null>;
   stats$!: Observable<DashboardStats>;
   investments$!: Observable<Investment[]>;
+  sips$!: Observable<Sip[]>;
   filteredInvestments$!: Observable<Investment[]>;
   investmentTypeOptions$!: Observable<string[]>;
   insights$!: Observable<InvestmentInsight>;
 
   isMobileMenuOpen = false;
   showModal = false;
+  showSipModal = false;
+  showDeleteModal = false;
   isSaving = false;
+  isSavingSip = false;
+  isDeleting = false;
   editingInvestmentId: number | null = null;
+  editingSipId: number | null = null;
+  deleteTargetType: 'investment' | 'sip' | null = null;
+  deleteTargetId: number | null = null;
+  deleteTargetName = '';
+  deletePassword = '';
+  deleteError = '';
 
   investmentTypes = INVESTMENT_TYPES;
   newInvestment: InvestmentForm = { ...DEFAULT_NEW_INVESTMENT };
+  newSip: SipForm = { ...DEFAULT_NEW_SIP };
 
   searchTerm = '';
   selectedType = 'All';
@@ -357,6 +472,7 @@ export class InvestmentsComponent implements OnInit {
     this.user$ = this.expenseService.getUser();
     this.stats$ = this.expenseService.getStats();
     this.investments$ = this.expenseService.getInvestments();
+    this.sips$ = this.expenseService.getSips();
 
     this.filteredInvestments$ = combineLatest([
       this.investments$,
@@ -430,6 +546,58 @@ export class InvestmentsComponent implements OnInit {
     this.newInvestment = { ...DEFAULT_NEW_INVESTMENT };
   }
 
+  canSaveSip(): boolean {
+    const investmentName = (this.newSip.investmentName || '').trim();
+    const amount = Number(this.newSip.monthlyAmount);
+    const sipDay = Number(this.newSip.sipDay);
+    return !!this.newSip.type && !!investmentName && Number.isFinite(amount) && amount > 0 && Number.isInteger(sipDay) && sipDay >= 1 && sipDay <= 31;
+  }
+
+  openAddSipModal() {
+    this.editingSipId = null;
+    this.newSip = { ...DEFAULT_NEW_SIP };
+    this.showSipModal = true;
+  }
+
+  openEditSipModal(sip: Sip) {
+    this.editingSipId = sip.id;
+    this.newSip = {
+      type: sip.type,
+      investmentName: sip.investmentName || '',
+      monthlyAmount: Number(sip.monthlyAmount || 0),
+      sipDay: Number(sip.sipDay || 1)
+    };
+    this.showSipModal = true;
+  }
+
+  closeSipModal() {
+    this.showSipModal = false;
+    this.isSavingSip = false;
+    this.editingSipId = null;
+    this.newSip = { ...DEFAULT_NEW_SIP };
+  }
+
+  private toSipPayload() {
+    return {
+      type: this.newSip.type,
+      investmentName: (this.newSip.investmentName || '').trim(),
+      monthlyAmount: Number(this.newSip.monthlyAmount),
+      sipDay: Number(this.newSip.sipDay)
+    };
+  }
+
+  getSipInvestmentNameLabel(type: string): string {
+    if (type === 'Mutual Fund') return 'Mutual Fund Name';
+    if (type === 'Stock') return 'Stock Name';
+    return `${type} Name`;
+  }
+
+  getSipInvestmentNamePlaceholder(type: string): string {
+    if (type === 'Mutual Fund') return 'e.g. Axis Bluechip Fund';
+    if (type === 'Stock') return 'e.g. Reliance Industries';
+    return `Enter ${type.toLowerCase()} name`;
+  }
+
   private toInvestmentPayload() {
     return {
       type: this.newInvestment.type,
@@ -461,10 +629,68 @@ export class InvestmentsComponent implements OnInit {
     }
   }
 
-  deleteInvestment(id: number) {
-    if (confirm('Delete this investment?')) {
-      this.expenseService.deleteInvestment(id);
+  openDeleteModal(type: 'investment' | 'sip', id: number, name: string) {
+    this.deleteTargetType = type;
+    this.deleteTargetId = id;
+    this.deleteTargetName = name || '';
+    this.deletePassword = '';
+    this.deleteError = '';
+    this.isDeleting = false;
+    this.showDeleteModal = true;
+  }
+
+  saveSip() {
+    if (this.canSaveSip() && !this.isSavingSip) {
+      this.isSavingSip = true;
+      const payload = this.toSipPayload();
+      const request$ = this.editingSipId
+        ? this.expenseService.updateSip(this.editingSipId, payload)
+        : this.expenseService.addSip(payload);
+
+      request$.subscribe({
+        next: () => {
+          this.closeSipModal();
+        },
+        error: (err) => {
+          this.isSavingSip = false;
+          console.error('Failed to save SIP:', err);
+          alert(err?.error?.error || 'Failed to save SIP. Please check details and try again.');
+        }
+      });
     }
+  }
+
+  closeDeleteModal() {
+    this.showDeleteModal = false;
+    this.isDeleting = false;
+    this.deleteTargetType = null;
+    this.deleteTargetId = null;
+    this.deleteTargetName = '';
+    this.deletePassword = '';
+    this.deleteError = '';
+  }
+
+  confirmDelete() {
+    if (!this.deleteTargetType || !this.deleteTargetId || !this.deletePassword.trim() || this.isDeleting) {
+      return;
+    }
+
+    this.isDeleting = true;
+    this.deleteError = '';
+
+    const request$ = this.deleteTargetType === 'sip'
+      ? this.expenseService.deleteSip(this.deleteTargetId, this.deletePassword.trim())
+      : this.expenseService.deleteInvestment(this.deleteTargetId, this.deletePassword.trim());
+
+    request$.subscribe({
+      next: () => {
+        this.closeDeleteModal();
+      },
+      error: (err) => {
+        this.isDeleting = false;
+        this.deleteError = err?.error?.error || 'Delete failed. Please check password and try again.';
+      }
+    });
   }
 
   private applyFilters(investments: Investment[], searchTerm: string, selectedType: string, sortBy: SortOption): Investment[] {

@@ -7,11 +7,12 @@ import { User, Bank } from '../../services/models';
 import { Observable } from 'rxjs';
 import { SidebarComponent } from '../../shared/sidebar/sidebar.component';
 import { FormsModule } from '@angular/forms';
+import { DeleteConfirmModalComponent } from '../../shared/delete-confirm-modal/delete-confirm-modal.component';
 
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, SidebarComponent, FormsModule],
+  imports: [CommonModule, SidebarComponent, FormsModule, DeleteConfirmModalComponent],
   template: `
     <main class="dashboard-layout">
       <app-sidebar [isMobileOpen]="isMobileMenuOpen" (closeMobile)="isMobileMenuOpen = false"></app-sidebar>
@@ -73,65 +74,6 @@ import { FormsModule } from '@angular/forms';
 
 
             <div class="card settings-list">
-              <div class="bank-management">
-                <h3>Bank Accounts</h3>
-                <p class="sub-text">Add your bank accounts to track balances</p>
-
-                <div class="bank-list">
-                  <div *ngFor="let bank of (banks$ | async) || []">
-                    <!-- Edit mode -->
-                    <div class="bank-item" *ngIf="editingBankId == bank.id">
-                      <div class="bank-edit-row">
-                        <input class="bank-edit-input" [(ngModel)]="editingBankName"
-                               (keyup.enter)="saveEdit(bank)" (keyup.escape)="cancelEdit()">
-                        <input class="bank-edit-input bank-edit-balance" type="number" step="0.01"
-                               [(ngModel)]="editingBankBalance"
-                               (keyup.enter)="saveEdit(bank)" (keyup.escape)="cancelEdit()">
-                      </div>
-                      <div class="bank-actions">
-                        <button class="icon-btn save-btn" (click)="saveEdit(bank)" title="Save">
-                          <i class="ph ph-check"></i>
-                        </button>
-                        <button class="icon-btn cancel-btn" (click)="cancelEdit()" title="Cancel">
-                          <i class="ph ph-x"></i>
-                        </button>
-                      </div>
-                    </div>
-                    <!-- View mode -->
-                    <div class="bank-item" *ngIf="editingBankId != bank.id">
-                      <div class="bank-info">
-                         <i class="ph ph-bank"></i>
-                         <div>
-                           <span class="bank-name">{{ bank.name }}</span>
-                           <span class="bank-balance">₹{{ bank.balance | number }}</span>
-                         </div>
-                      </div>
-                      <div class="bank-actions">
-                        <button class="icon-btn edit-btn" (click)="startEdit(bank)" title="Edit">
-                          <i class="ph ph-pencil-simple"></i>
-                        </button>
-                        <button
-                          class="icon-btn delete-btn"
-                          (click)="deleteBank(bank)"
-                          [disabled]="(banks$ | async)?.length === 1"
-                          [title]="(banks$ | async)?.length === 1 ? 'At least one bank is required' : 'Delete'">
-                          <i class="ph ph-trash"></i>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  <p *ngIf="!((banks$ | async)?.length)" class="no-banks">No bank accounts added yet.</p>
-                </div>
-
-                <div class="input-group bank-add-group" style="margin-top: 16px;">
-                  <input type="text" [(ngModel)]="newBankName" placeholder="Bank Name (e.g. HDFC)" (keyup.enter)="addBank()">
-                  <input type="number" step="0.01" [(ngModel)]="newBankBalance" placeholder="Opening Balance" (keyup.enter)="addBank()">
-                  <button class="outline-btn" (click)="addBank()" [disabled]="!newBankName.trim()">Add Bank</button>
-                </div>
-              </div>
-
-              <hr class="divider">
-
               <h3>Preferences</h3>
 
               <div class="setting-item">
@@ -189,25 +131,15 @@ import { FormsModule } from '@angular/forms';
       </div>
     </main>
 
-    <!-- Delete Confirmation Modal -->
-    <div class="confirm-overlay" *ngIf="showDeleteConfirm" (click)="cancelDelete()">
-      <div class="confirm-card" (click)="$event.stopPropagation()">
-        <div class="confirm-icon-wrap">
-          <i class="ph ph-trash"></i>
-        </div>
-        <h3 class="confirm-title">Delete Bank Account?</h3>
-        <p class="confirm-msg">
-          You're about to delete <strong>{{ bankToDelete?.name }}</strong>.
-          This action cannot be undone. Existing transactions linked to this account will be retained.
-        </p>
-        <div class="confirm-actions">
-          <button class="cancel-action-btn" (click)="cancelDelete()">Cancel</button>
-          <button class="delete-action-btn" (click)="confirmDelete()">
-            <i class="ph ph-trash"></i> Delete
-          </button>
-        </div>
-      </div>
-    </div>
+    <app-delete-confirm-modal
+      [visible]="showDeleteConfirm"
+      [title]="'Delete Bank?'"
+      [message]="'Are you sure you want to delete ' + (bankToDelete?.name || 'this bank') + '?'"
+      [confirmText]="'Delete Bank'"
+      [errorMessage]="deleteBankError"
+      (closed)="cancelDelete()"
+      (confirmed)="confirmDelete()">
+    </app-delete-confirm-modal>
 
     <div class="confirm-overlay" *ngIf="showDeleteAccountConfirm" (click)="cancelDeleteAccount()">
       <div class="confirm-card" (click)="$event.stopPropagation()">
@@ -345,6 +277,47 @@ import { FormsModule } from '@angular/forms';
       display: none;
         align-items: center;
         justify-content: center;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .modal-card {
+      background: var(--bg-card);
+      width: 450px;
+      max-width: 90%;
+      border-radius: 24px;
+      padding: 32px;
+      box-shadow: var(--shadow-xl);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+
+    .close-btn {
+      background: var(--bg-hover);
+      border: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
     }
 
     @media (max-width: 900px) {
@@ -486,6 +459,7 @@ export class SettingsComponent implements OnInit {
   editingBankBalance: number | null = null;
   showDeleteConfirm = false;
   bankToDelete: Bank | null = null;
+  deleteBankError = '';
   bankCount = 0;
   showDeleteAccountConfirm = false;
   deleteAccountPassword = '';
@@ -577,18 +551,14 @@ export class SettingsComponent implements OnInit {
   }
 
   deleteBank(bank: Bank) {
-    if (this.bankCount <= 1) {
-      alert('At least one bank account is required.');
-      return;
-    }
     this.bankToDelete = bank;
+    this.deleteBankError = this.bankCount <= 1 ? 'At least one bank account is required.' : '';
     this.showDeleteConfirm = true;
   }
 
   confirmDelete() {
     if (this.bankCount <= 1) {
-      alert('At least one bank account is required.');
-      this.cancelDelete();
+      this.deleteBankError = 'At least one bank account is required.';
       return;
     }
     if (this.bankToDelete) {
@@ -600,6 +570,7 @@ export class SettingsComponent implements OnInit {
   cancelDelete() {
     this.showDeleteConfirm = false;
     this.bankToDelete = null;
+    this.deleteBankError = '';
   }
 
   openDeleteAccountModal() {

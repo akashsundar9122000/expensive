@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { BehaviorSubject, Observable, tap, take, catchError, of, throwError, firstValueFrom } from 'rxjs';
-import { Transaction, Subscription, Investment, DashboardStats, User, Budget, Bank } from './models';
+import { Transaction, Subscription, Investment, Sip, DashboardStats, User, Budget, Bank } from './models';
 import { AuthService } from './auth.service';
 import { environment } from '../../environments/environment';
 
@@ -13,6 +13,7 @@ export class ExpenseService {
     private transactions = new BehaviorSubject<Transaction[]>([]);
     private subscriptions = new BehaviorSubject<Subscription[]>([]);
     private investments = new BehaviorSubject<Investment[]>([]);
+    private sips = new BehaviorSubject<Sip[]>([]);
     private budgets = new BehaviorSubject<Budget[]>([]);
     private banks = new BehaviorSubject<Bank[]>([]);
     private user = new BehaviorSubject<User | null>(null);
@@ -84,6 +85,9 @@ export class ExpenseService {
         const investments = await firstValueFrom(
             this.http.get<Investment[]>(`${this.apiUrl}/investments`).pipe(catchError(() => of([])))
         );
+        const sips = await firstValueFrom(
+            this.http.get<Sip[]>(`${this.apiUrl}/sips`).pipe(catchError(() => of([])))
+        );
         const budgets = await firstValueFrom(
             this.http.get<Budget[]>(`${this.apiUrl}/budgets`).pipe(catchError(() => of([])))
         );
@@ -98,6 +102,7 @@ export class ExpenseService {
         this.transactions.next(transactions);
         this.subscriptions.next(subscriptions);
         this.investments.next(normalizedInvestments);
+        this.sips.next(sips || []);
         this.budgets.next(budgets);
         this.stats.next(statsData);
         this.banks.next(bankList);
@@ -114,6 +119,7 @@ export class ExpenseService {
         this.transactions.next([]);
         this.subscriptions.next([]);
         this.investments.next([]);
+        this.sips.next([]);
         this.budgets.next([]);
         this.banks.next([]);
         this.user.next(null);
@@ -124,8 +130,20 @@ export class ExpenseService {
     getTransactions(): Observable<Transaction[]> { return this.transactions.asObservable(); }
     getSubscriptions(): Observable<Subscription[]> { return this.subscriptions.asObservable(); }
     getInvestments(): Observable<Investment[]> { return this.investments.asObservable(); }
+    getSips(): Observable<Sip[]> { return this.sips.asObservable(); }
     getBudgets(): Observable<Budget[]> { return this.budgets.asObservable(); }
     getBanks(): Observable<Bank[]> { return this.banks.asObservable(); }
+
+    private getAuthRequestOptions() {
+        const token = this.authService.getValidToken();
+        if (!token) {
+            return {};
+        }
+
+        return {
+            headers: new HttpHeaders({ Authorization: `Bearer ${token}` })
+        };
+    }
 
     addBank(bankName: string, balance?: number | null) {
         const trimmedName = (bankName || '').trim();
@@ -248,12 +266,9 @@ export class ExpenseService {
 
     editSubscription(id: number, sub: Omit<Subscription, 'id'>): Observable<Subscription> {
         console.log('Calling editSubscription with ID:', id, 'Payload:', sub);
-        const token = localStorage.getItem('token');
-        const headers = token
-            ? new HttpHeaders({ Authorization: `Bearer ${token}` })
-            : undefined;
+        const requestOptions = this.getAuthRequestOptions();
 
-        return this.http.put<Subscription>(`${this.apiUrl}/subscriptions?id=${id}`, sub, { headers }).pipe(
+        return this.http.put<Subscription>(`${this.apiUrl}/subscriptions?id=${id}`, sub, requestOptions).pipe(
             tap((response) => {
                 console.log('EditSubscription response:', response);
                 // Ensure UI updates by triggering a fresh load
@@ -261,14 +276,14 @@ export class ExpenseService {
             }),
             catchError((error) => {
                 console.error('EditSubscription primary route failed, trying fallback route:', error);
-                return this.http.put<Subscription>(`${this.apiUrl}/subscriptions/${id}`, sub, { headers }).pipe(
+                return this.http.put<Subscription>(`${this.apiUrl}/subscriptions/${id}`, sub, requestOptions).pipe(
                     tap((response) => {
                         console.log('EditSubscription fallback response:', response);
                         setTimeout(() => this.refreshAllData(), 100);
                     }),
                     catchError((fallbackError) => {
                         console.error('EditSubscription second route failed, trying POST fallback:', fallbackError);
-                        return this.http.post<Subscription>(`${this.apiUrl}/subscriptions/update?id=${id}`, sub, { headers }).pipe(
+                        return this.http.post<Subscription>(`${this.apiUrl}/subscriptions/update?id=${id}`, sub, requestOptions).pipe(
                             tap((response) => {
                                 console.log('EditSubscription POST fallback response:', response);
                                 setTimeout(() => this.refreshAllData(), 100);
@@ -303,11 +318,31 @@ export class ExpenseService {
         );
     }
 
-    deleteInvestment(id: number) {
-        this.http.delete(`${this.apiUrl}/investments?id=${id}`).subscribe({
-            next: () => { this.refreshAllData(); },
-            error: (err) => { console.error('Failed to delete investment:', err); }
-        });
+    deleteInvestment(id: number, password: string): Observable<any> {
+        return this.http.delete(`${this.apiUrl}/investments/${id}`, { body: { password } }).pipe(
+            tap(() => { this.refreshAllData(); })
+        );
+    }
+
+    addSip(sip: Omit<Sip, 'id'>): Observable<Sip> {
+        return this.http.post<Sip>(`${this.apiUrl}/sips`, sip, this.getAuthRequestOptions()).pipe(
+            tap(() => { this.refreshAllData(); })
+        );
+    }
+
+    updateSip(id: number, sip: Omit<Sip, 'id'>): Observable<Sip> {
+        return this.http.put<Sip>(`${this.apiUrl}/sips`, { id, ...sip }, this.getAuthRequestOptions()).pipe(
+            tap(() => { this.refreshAllData(); })
+        );
+    }
+
+    deleteSip(id: number, password: string): Observable<any> {
+        return this.http.delete(`${this.apiUrl}/sips?id=${id}`, {
+            ...this.getAuthRequestOptions(),
+            body: { password }
+        }).pipe(
+            tap(() => { this.refreshAllData(); })
+        );
     }
 
     fundGoal(amount: number) {

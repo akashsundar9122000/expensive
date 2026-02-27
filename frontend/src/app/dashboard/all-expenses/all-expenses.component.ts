@@ -5,6 +5,7 @@ import { Transaction, User, Bank } from '../../services/models';
 import { Observable, combineLatest, map, BehaviorSubject, take } from 'rxjs';
 import { SidebarComponent } from '../../shared/sidebar/sidebar.component';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { DeleteConfirmModalComponent } from '../../shared/delete-confirm-modal/delete-confirm-modal.component';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import 'jspdf-autotable';
@@ -15,7 +16,7 @@ import * as XLSX from 'xlsx';
 @Component({
   selector: 'app-all-expenses',
   standalone: true,
-  imports: [CommonModule, SidebarComponent, FormsModule, ReactiveFormsModule],
+  imports: [CommonModule, SidebarComponent, FormsModule, ReactiveFormsModule, DeleteConfirmModalComponent],
   template: `
     <main class="dashboard-layout" *ngIf="{
       user: user$ | async,
@@ -264,24 +265,14 @@ import * as XLSX from 'xlsx';
       <button class="toast-close" (click)="toast.show = false"><i class="ph ph-x"></i></button>
     </div>
 
-    <div class="confirm-overlay" *ngIf="showDeleteConfirm" (click)="cancelDelete()">
-      <div class="confirm-card" (click)="$event.stopPropagation()">
-        <div class="confirm-icon-wrap">
-          <i class="ph ph-trash"></i>
-        </div>
-        <h3 class="confirm-title">Delete Expense?</h3>
-        <p class="confirm-msg">
-          You're about to delete <strong>{{ transactionToDelete?.subCategory || transactionToDelete?.category || 'this expense' }}</strong>.
-          This action cannot be undone.
-        </p>
-        <div class="confirm-actions">
-          <button class="cancel-action-btn" (click)="cancelDelete()">Cancel</button>
-          <button class="delete-action-btn" (click)="confirmDelete()">
-            <i class="ph ph-trash"></i> Delete
-          </button>
-        </div>
-      </div>
-    </div>
+    <app-delete-confirm-modal
+      [visible]="showDeleteConfirm"
+      [title]="'Delete Expense?'"
+      [message]="'You are about to delete ' + (transactionToDelete?.subCategory || transactionToDelete?.category || 'this expense') + '. This action cannot be undone.'"
+      [confirmText]="'Delete'"
+      (closed)="cancelDelete()"
+      (confirmed)="confirmDelete()">
+    </app-delete-confirm-modal>
   `,
   styles: [`
     .amount-text { color: var(--text-dark); }
@@ -341,91 +332,6 @@ import * as XLSX from 'xlsx';
       margin-top: 1px;
     }
 
-    .confirm-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.45);
-      backdrop-filter: blur(6px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      animation: fadeIn 0.2s ease;
-    }
-
-    .confirm-card {
-      background: var(--bg-card);
-      border-radius: 24px;
-      padding: 36px 32px;
-      width: 380px;
-      max-width: 92%;
-      box-shadow: 0 24px 64px rgba(0,0,0,0.18);
-      text-align: center;
-      animation: scaleIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
-    }
-
-    .confirm-icon-wrap {
-      width: 64px;
-      height: 64px;
-      border-radius: 50%;
-      background: rgba(239,68,68,0.1);
-      color: #ef4444;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 28px;
-      margin: 0 auto 20px;
-    }
-
-    .confirm-title {
-      font-size: 18px;
-      font-weight: 700;
-      color: var(--text-dark);
-      margin-bottom: 12px;
-    }
-
-    .confirm-msg {
-      font-size: 14px;
-      color: var(--text-muted);
-      line-height: 1.6;
-      margin-bottom: 28px;
-    }
-
-    .confirm-msg strong { color: var(--text-dark); }
-
-    .confirm-actions {
-      display: flex;
-      gap: 12px;
-    }
-
-    .cancel-action-btn {
-      flex: 1;
-      padding: 12px;
-      border-radius: 12px;
-      border: 1.5px solid var(--border-light);
-      background: var(--bg-chip);
-      color: var(--text-dark);
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    .delete-action-btn {
-      flex: 1;
-      padding: 12px;
-      border-radius: 12px;
-      border: none;
-      background: #ef4444;
-      color: #fff;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-    }
-    
     .filter-section {
       display: flex;
       gap: 16px;

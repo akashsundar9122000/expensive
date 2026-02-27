@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, map, tap } from 'rxjs';
+import { BehaviorSubject, Observable, catchError, map, of, tap } from 'rxjs';
 import { User } from './models';
 import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
@@ -80,6 +80,18 @@ export class AuthService {
         });
     }
 
+    verifyPassword(password: string): Observable<boolean> {
+        const email = (this.currentUserSubject.value?.email || '').trim().toLowerCase();
+        if (!email || !password) {
+            return of(false);
+        }
+
+        return this.http.post<any>(`${this.apiUrl}/login`, { email, password }).pipe(
+            map(response => !!response?.token),
+            catchError(() => of(false))
+        );
+    }
+
     getRememberedLogin(): { email: string; password: string; remember: boolean } | null {
         const saved = localStorage.getItem(this.rememberedLoginKey);
         if (!saved) {
@@ -131,7 +143,42 @@ export class AuthService {
     }
 
     isLoggedIn(): boolean {
-        return !!localStorage.getItem('token');
+        return !!this.getValidToken();
+    }
+
+    getValidToken(): string | null {
+        const token = localStorage.getItem('token');
+        if (!token) {
+            return null;
+        }
+
+        if (this.isTokenExpired(token)) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('currentUser');
+            this.currentUserSubject.next(null);
+            return null;
+        }
+
+        return token;
+    }
+
+    private isTokenExpired(token: string): boolean {
+        try {
+            const parts = token.split('.');
+            if (parts.length !== 3) {
+                return true;
+            }
+
+            const payload = JSON.parse(atob(parts[1]));
+            const exp = Number(payload?.exp);
+            if (!Number.isFinite(exp)) {
+                return true;
+            }
+
+            return Date.now() >= exp * 1000;
+        } catch {
+            return true;
+        }
     }
 
     private persistSession(response: any) {

@@ -55,6 +55,17 @@ CREATE TABLE IF NOT EXISTS investments (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- SIPs table
+CREATE TABLE IF NOT EXISTS sips (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    investment_name TEXT NOT NULL,
+    monthly_amount NUMERIC NOT NULL,
+    sip_day INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Budgets table
 CREATE TABLE IF NOT EXISTS budgets (
     id BIGSERIAL PRIMARY KEY,

@@ -5,6 +5,7 @@ import { Subscription, User } from '../../services/models';
 import { Observable } from 'rxjs';
 import { SidebarComponent } from '../../shared/sidebar/sidebar.component';
 import { FormsModule } from '@angular/forms';
+import { DeleteConfirmModalComponent } from '../../shared/delete-confirm-modal/delete-confirm-modal.component';
 
 const POPULAR_SERVICES = [
   { name: 'Netflix', icon: 'ph-play', color: '#E50914' },
@@ -20,7 +21,7 @@ const POPULAR_SERVICES = [
 @Component({
   selector: 'app-subscriptions',
   standalone: true,
-  imports: [CommonModule, SidebarComponent, FormsModule],
+  imports: [CommonModule, SidebarComponent, FormsModule, DeleteConfirmModalComponent],
   template: `
     <main class="dashboard-layout" *ngIf="{
       user: user$ | async,
@@ -145,24 +146,14 @@ const POPULAR_SERVICES = [
       </div>
     </div>
 
-    <div class="confirm-overlay" *ngIf="showDeleteConfirm" (click)="cancelDelete()">
-      <div class="confirm-card" (click)="$event.stopPropagation()">
-        <div class="confirm-icon-wrap">
-          <i class="ph ph-trash"></i>
-        </div>
-        <h3 class="confirm-title">Delete Subscription?</h3>
-        <p class="confirm-msg">
-          You're about to delete <strong>{{ subToDelete?.name }}</strong>.
-          This action cannot be undone.
-        </p>
-        <div class="confirm-actions">
-          <button class="cancel-action-btn" (click)="cancelDelete()">Cancel</button>
-          <button class="delete-action-btn" (click)="confirmDelete()">
-            <i class="ph ph-trash"></i> Delete
-          </button>
-        </div>
-      </div>
-    </div>
+    <app-delete-confirm-modal
+      [visible]="showDeleteConfirm"
+      [title]="'Delete Subscription?'"
+      [message]="'You are about to delete ' + (subToDelete?.name || 'this subscription') + '. This action cannot be undone.'"
+      [confirmText]="'Delete'"
+      (closed)="cancelDelete()"
+      (confirmed)="confirmDelete()">
+    </app-delete-confirm-modal>
   `,
   styles: [`
     .total-badge {
@@ -226,90 +217,6 @@ const POPULAR_SERVICES = [
       .quick-grid { grid-template-columns: repeat(2, 1fr); }
     }
 
-    .confirm-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.45);
-      backdrop-filter: blur(6px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      animation: fadeIn 0.2s ease;
-    }
-
-    .confirm-card {
-      background: var(--bg-card);
-      border-radius: 24px;
-      padding: 36px 32px;
-      width: 380px;
-      max-width: 92%;
-      box-shadow: 0 24px 64px rgba(0,0,0,0.18);
-      text-align: center;
-      animation: scaleIn 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
-    }
-
-    .confirm-icon-wrap {
-      width: 64px;
-      height: 64px;
-      border-radius: 50%;
-      background: rgba(239,68,68,0.1);
-      color: #ef4444;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 28px;
-      margin: 0 auto 20px;
-    }
-
-    .confirm-title {
-      font-size: 18px;
-      font-weight: 700;
-      color: var(--text-dark);
-      margin-bottom: 12px;
-    }
-
-    .confirm-msg {
-      font-size: 14px;
-      color: var(--text-muted);
-      line-height: 1.6;
-      margin-bottom: 28px;
-    }
-
-    .confirm-msg strong { color: var(--text-dark); }
-
-    .confirm-actions {
-      display: flex;
-      gap: 12px;
-    }
-
-    .cancel-action-btn {
-      flex: 1;
-      padding: 12px;
-      border-radius: 12px;
-      border: 1.5px solid var(--border-light);
-      background: var(--bg-chip);
-      color: var(--text-dark);
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-
-    .delete-action-btn {
-      flex: 1;
-      padding: 12px;
-      border-radius: 12px;
-      border: none;
-      background: #ef4444;
-      color: #fff;
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-    }
   `]
 })
 export class SubscriptionsComponent implements OnInit {

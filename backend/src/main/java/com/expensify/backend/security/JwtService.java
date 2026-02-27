@@ -6,7 +6,9 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
+
 import java.security.Key;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -53,14 +55,39 @@ public class JwtService {
     }
 
     private Claims extractAllClaims(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(getSignInKey())
-                .build()
-                .parseClaimsJws(token)
-                .getBody();
+        RuntimeException lastException;
+
+        try {
+            return Jwts.parserBuilder()
+                    .setSigningKey(getPrimarySignInKey())
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+        } catch (RuntimeException ex) {
+            lastException = ex;
+        }
+
+        try {
+            return Jwts.parserBuilder()
+                    .setSigningKey(getLegacySignInKey())
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+        } catch (RuntimeException ex) {
+            throw lastException;
+        }
     }
 
     private Key getSignInKey() {
+        return getPrimarySignInKey();
+    }
+
+    private Key getPrimarySignInKey() {
+        byte[] keyBytes = SECRET_KEY.getBytes(StandardCharsets.UTF_8);
+        return Keys.hmacShaKeyFor(keyBytes);
+    }
+
+    private Key getLegacySignInKey() {
         byte[] keyBytes = io.jsonwebtoken.io.Decoders.BASE64.decode(SECRET_KEY);
         return Keys.hmacShaKeyFor(keyBytes);
     }

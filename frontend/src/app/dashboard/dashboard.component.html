@@ -3,6 +3,7 @@
   stats: stats$ | async,
   transactions: transactions$ | async,
   subscriptions: subscriptions$ | async,
+    sips: sips$ | async,
   budgets: budgets$ | async,
   banks: banks$ | async
 } as data" class="dashboard-wrapper">
@@ -299,23 +300,47 @@
                     </div>
                 </div>
 
-                <!-- Subscriptions -->
-                <div class="card subs-card">
-                    <div class="flex-between chart-header">
-                        <h3>Upcoming Bills</h3>
-                        <a routerLink="/subscriptions" class="view-all">Manage</a>
-                    </div>
-                    <div class="subs-list">
-                        <div class="sub-item" *ngFor="let s of (data.subscriptions || []).slice(0, 4)">
-                            <div class="sub-icon" [style.backgroundColor]="s.color + '20'" [style.color]="s.color">
-                                <i [class]="'ph ' + (s.icon?.startsWith('ph-') ? s.icon : 'ph-' + (s.icon || 'star'))"></i>
-                            </div>
-                            <div class="sub-details">
-                                <h4>{{ s.name }}</h4>
-                                <p>Monthly Subscription</p>
-                            </div>
-                            <div class="sub-amount">-₹{{ s.amount | number:'1.0-0' }}</div>
+                <div class="right-widgets">
+                    <!-- Subscriptions -->
+                    <div class="card subs-card">
+                        <div class="flex-between chart-header">
+                            <h3>Upcoming Bills</h3>
+                            <a routerLink="/subscriptions" class="view-all">Manage</a>
                         </div>
+                        <div class="subs-list">
+                            <div class="sub-item" *ngFor="let s of (data.subscriptions || []).slice(0, 4)">
+                                <div class="sub-icon" [style.backgroundColor]="s.color + '20'" [style.color]="s.color">
+                                    <i [class]="'ph ' + (s.icon?.startsWith('ph-') ? s.icon : 'ph-' + (s.icon || 'star'))"></i>
+                                </div>
+                                <div class="sub-details">
+                                    <h4>{{ s.name }}</h4>
+                                    <p>Monthly Subscription</p>
+                                </div>
+                                <div class="sub-amount">-₹{{ s.amount | number:'1.0-0' }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card sip-due-card">
+                        <div class="flex-between chart-header">
+                            <h3>SIP Due Tomorrow</h3>
+                            <a routerLink="/investments" class="view-all">Manage</a>
+                        </div>
+                        <div *ngIf="dueTomorrowSips.length > 0; else noSipDueTomorrow" class="sip-due-list">
+                            <div class="sip-due-item" *ngFor="let sip of dueTomorrowSips">
+                                <div class="sip-due-icon">
+                                    <i class="ph ph-calendar-check"></i>
+                                </div>
+                                <div class="sip-due-details">
+                                    <h4>{{ sip.investmentName || sip.type }}</h4>
+                                    <p>{{ sip.type }} • Day {{ sip.sipDay }}</p>
+                                </div>
+                                <div class="sip-due-amount">₹{{ sip.monthlyAmount | number:'1.0-0' }}</div>
+                            </div>
+                        </div>
+                        <ng-template #noSipDueTomorrow>
+                            <p class="no-data-msg">No SIP due tomorrow</p>
+                        </ng-template>
                     </div>
                 </div>
             </div>

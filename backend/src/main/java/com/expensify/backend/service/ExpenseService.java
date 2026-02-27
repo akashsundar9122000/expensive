@@ -5,6 +5,7 @@ import com.expensify.backend.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -19,7 +20,9 @@ public class ExpenseService {
     private final SubscriptionRepository subscriptionRepository;
     private final UserPreferenceRepository userPreferenceRepository;
     private final InvestmentRepository investmentRepository;
+    private final SipRepository sipRepository;
     private final BudgetRepository budgetRepository;
+    private final PasswordEncoder passwordEncoder;
 
     public List<Transaction> getTransactions(User user) {
         return transactionRepository.findByUserOrderByDateDesc(user);
@@ -169,6 +172,10 @@ public class ExpenseService {
         return investmentRepository.findByUser(user);
     }
 
+    public List<Sip> getSips(User user) {
+        return sipRepository.findByUser(user);
+    }
+
     @Transactional
     public Investment addInvestment(User user, Investment investment) {
         investment.setUser(user);
@@ -176,8 +183,71 @@ public class ExpenseService {
     }
 
     @Transactional
-    public void deleteInvestment(Long id) {
-        investmentRepository.deleteById(id);
+    public Sip addSip(User user, Sip sip) {
+        sip.setUser(user);
+        return sipRepository.save(sip);
+    }
+
+    @Transactional
+    public Sip updateSip(User user, Long id, Sip updates) {
+        Sip existing = sipRepository.findByIdAndUser(id, user)
+                .orElseThrow();
+
+        existing.setType(updates.getType());
+        existing.setInvestmentName(updates.getInvestmentName());
+        existing.setMonthlyAmount(updates.getMonthlyAmount());
+        existing.setSipDay(updates.getSipDay());
+
+        return sipRepository.save(existing);
+    }
+
+    @Transactional
+    public void deleteInvestment(User user, Long id, String password) {
+        if (password == null || password.isBlank()) {
+            throw new IllegalArgumentException("Password is required");
+        }
+
+        String storedPassword = user.getPassword();
+        boolean passwordMatches = isBcryptHash(storedPassword)
+                ? passwordEncoder.matches(password, storedPassword)
+                : storedPassword != null && storedPassword.equals(password);
+
+        if (!passwordMatches) {
+            throw new IllegalArgumentException("Incorrect password");
+        }
+
+        Investment investment = investmentRepository.findById(id)
+                .orElseThrow();
+
+        if (investment.getUser() == null || !investment.getUser().getId().equals(user.getId())) {
+            throw new IllegalArgumentException("Investment not found");
+        }
+
+        investmentRepository.delete(investment);
+    }
+
+    @Transactional
+    public void deleteSip(User user, Long id, String password) {
+        if (password == null || password.isBlank()) {
+            throw new IllegalArgumentException("Password is required");
+        }
+
+        String storedPassword = user.getPassword();
+        boolean passwordMatches = isBcryptHash(storedPassword)
+                ? passwordEncoder.matches(password, storedPassword)
+                : storedPassword != null && storedPassword.equals(password);
+
+        if (!passwordMatches) {
+            throw new IllegalArgumentException("Incorrect password");
+        }
+
+        Sip existing = sipRepository.findByIdAndUser(id, user)
+                .orElseThrow();
+        sipRepository.delete(existing);
+    }
+
+    private boolean isBcryptHash(String password) {
+        return password != null && password.matches("^\\$2[aby]?\\$\\d{2}\\$.*");
     }
 
     public BigDecimal getTotalInvestmentAmount(User user) {

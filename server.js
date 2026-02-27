@@ -9,6 +9,7 @@ const auth = require('./api/auth');
 const transactions = require('./api/expenses/transactions');
 const subscriptions = require('./api/expenses/subscriptions');
 const investments = require('./api/expenses/investments');
+const sips = require('./api/expenses/sips');
 const budgets = require('./api/expenses/budgets');
 const stats = require('./api/expenses/stats');
 const preferences = require('./api/expenses/preferences');
@@ -38,6 +39,10 @@ app.all('/api/expenses/subscriptions', handle(subscriptions));
 // Investments
 app.all('/api/expenses/investments/:id', handle(investments));
 app.all('/api/expenses/investments', handle(investments));
+
+// SIPs
+app.all('/api/expenses/sips/:id', handle(sips));
+app.all('/api/expenses/sips', handle(sips));
 
 // Budgets
 app.all('/api/expenses/budgets', handle(budgets));

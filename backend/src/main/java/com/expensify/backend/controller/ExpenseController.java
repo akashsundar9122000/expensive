@@ -3,6 +3,7 @@ package com.expensify.backend.controller;
 import com.expensify.backend.model.BankAccount;
 import com.expensify.backend.model.Budget;
 import com.expensify.backend.model.Investment;
+import com.expensify.backend.model.Sip;
 import com.expensify.backend.model.Transaction;
 import com.expensify.backend.model.User;
 import com.expensify.backend.repository.UserRepository;
@@ -166,9 +167,48 @@ public class ExpenseController {
     }
 
     @DeleteMapping("/investments/{id}")
-    public ResponseEntity<Void> deleteInvestment(@PathVariable Long id) {
-        expenseService.deleteInvestment(id);
-        return ResponseEntity.ok().build();
+    public ResponseEntity<?> deleteInvestment(@PathVariable Long id, @RequestBody(required = false) Map<String, Object> body, Principal principal) {
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+        String password = body != null && body.get("password") != null ? String.valueOf(body.get("password")) : "";
+        try {
+            expenseService.deleteInvestment(user, id, password);
+            return ResponseEntity.ok().build();
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+        }
+    }
+
+    @GetMapping("/sips")
+    public ResponseEntity<List<Sip>> getSips(Principal principal) {
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+        return ResponseEntity.ok(expenseService.getSips(user));
+    }
+
+    @PostMapping("/sips")
+    public ResponseEntity<Sip> addSip(@RequestBody Sip sip, Principal principal) {
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+        return ResponseEntity.ok(expenseService.addSip(user, sip));
+    }
+
+    @PutMapping("/sips")
+    public ResponseEntity<Sip> updateSip(@RequestBody Sip sip, Principal principal) {
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+        if (sip.getId() == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(expenseService.updateSip(user, sip.getId(), sip));
+    }
+
+    @DeleteMapping("/sips")
+    public ResponseEntity<?> deleteSip(@RequestParam Long id, @RequestBody(required = false) Map<String, Object> body, Principal principal) {
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+        String password = body != null && body.get("password") != null ? String.valueOf(body.get("password")) : "";
+        try {
+            expenseService.deleteSip(user, id, password);
+            return ResponseEntity.ok().build();
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+        }
     }
 
     @PutMapping("/preferences")

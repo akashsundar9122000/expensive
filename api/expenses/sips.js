@@ -15,89 +15,85 @@ module.exports = async (req, res) => {
         return parsed;
     };
 
+    const parseSipDay = (value) => {
+        const parsed = Number(value);
+        if (!Number.isInteger(parsed) || parsed < 1 || parsed > 31) return null;
+        return parsed;
+    };
+
     try {
         const userResult = await query('SELECT id, password FROM users WHERE LOWER(email) = LOWER($1)', [email]);
         if (userResult.rows.length === 0) return res.status(401).json({ error: 'User not found' });
         const userId = userResult.rows[0].id;
         const userPassword = userResult.rows[0].password;
 
-        // Ensure investments table exists (idempotent)
         await query(`
-            CREATE TABLE IF NOT EXISTS investments (
+            CREATE TABLE IF NOT EXISTS sips (
                 id BIGSERIAL PRIMARY KEY,
                 user_id UUID REFERENCES users(id) ON DELETE CASCADE,
                 type TEXT NOT NULL,
-                name TEXT NOT NULL,
-                amount NUMERIC NOT NULL,
-                return_pct NUMERIC,
+                investment_name TEXT,
+                monthly_amount NUMERIC NOT NULL,
+                sip_day INTEGER NOT NULL,
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
             )
         `);
 
+        await query('ALTER TABLE sips ADD COLUMN IF NOT EXISTS investment_name TEXT');
+
         if (req.method === 'GET') {
             const result = await query(
-                'SELECT id, type, name, amount, return_pct as "returnPct" FROM investments WHERE user_id = $1 ORDER BY created_at DESC, id DESC',
+                "SELECT id, type, COALESCE(investment_name, '') as \"investmentName\", monthly_amount as \"monthlyAmount\", sip_day as \"sipDay\" FROM sips WHERE user_id = $1 ORDER BY created_at DESC, id DESC",
                 [userId]
             );
             return res.status(200).json(result.rows);
         }
 
         if (req.method === 'POST') {
-            const { type, name, amount, returnPct } = req.body;
+            const { type, investmentName, monthlyAmount, sipDay } = req.body || {};
             const sanitizedType = String(type || '').trim();
-            const sanitizedName = String(name || '').trim();
-            const sanitizedAmount = parsePositiveAmount(amount);
-            const sanitizedReturnPct = returnPct === undefined || returnPct === null || returnPct === ''
-                ? null
-                : Number(returnPct);
+            const sanitizedInvestmentName = String(investmentName || '').trim();
+            const sanitizedMonthlyAmount = parsePositiveAmount(monthlyAmount);
+            const sanitizedSipDay = parseSipDay(sipDay);
 
-            if (!sanitizedType || !sanitizedName || sanitizedAmount === null) {
-                return res.status(400).json({ error: 'Type, name, and a positive amount are required' });
-            }
-
-            if (sanitizedReturnPct !== null && !Number.isFinite(sanitizedReturnPct)) {
-                return res.status(400).json({ error: 'Invalid return percentage' });
+            if (!sanitizedType || !sanitizedInvestmentName || sanitizedMonthlyAmount === null || sanitizedSipDay === null) {
+                return res.status(400).json({ error: 'Type, investmentName, monthlyAmount (>0), and sipDay (1-31) are required' });
             }
 
             const result = await query(
-                'INSERT INTO investments (user_id, type, name, amount, return_pct) VALUES ($1, $2, $3, $4, $5) RETURNING id, type, name, amount, return_pct as "returnPct"',
-                [userId, sanitizedType, sanitizedName, sanitizedAmount, sanitizedReturnPct]
+                'INSERT INTO sips (user_id, type, investment_name, monthly_amount, sip_day) VALUES ($1, $2, $3, $4, $5) RETURNING id, type, investment_name as "investmentName", monthly_amount as "monthlyAmount", sip_day as "sipDay"',
+                [userId, sanitizedType, sanitizedInvestmentName, sanitizedMonthlyAmount, sanitizedSipDay]
             );
+
             return res.status(200).json(result.rows[0]);
         }
 
         if (req.method === 'PUT') {
-            const { id, type, name, amount, returnPct } = req.body || {};
+            const { id, type, investmentName, monthlyAmount, sipDay } = req.body || {};
             const parsedId = Number(id);
             const sanitizedType = String(type || '').trim();
-            const sanitizedName = String(name || '').trim();
-            const sanitizedAmount = parsePositiveAmount(amount);
-            const sanitizedReturnPct = returnPct === undefined || returnPct === null || returnPct === ''
-                ? null
-                : Number(returnPct);
+            const sanitizedInvestmentName = String(investmentName || '').trim();
+            const sanitizedMonthlyAmount = parsePositiveAmount(monthlyAmount);
+            const sanitizedSipDay = parseSipDay(sipDay);
 
             if (!Number.isInteger(parsedId) || parsedId <= 0) {
                 return res.status(400).json({ error: 'Valid ID is required' });
             }
 
-            if (!sanitizedType || !sanitizedName || sanitizedAmount === null) {
-                return res.status(400).json({ error: 'Type, name, and a positive amount are required' });
-            }
-
-            if (sanitizedReturnPct !== null && !Number.isFinite(sanitizedReturnPct)) {
-                return res.status(400).json({ error: 'Invalid return percentage' });
+            if (!sanitizedType || !sanitizedInvestmentName || sanitizedMonthlyAmount === null || sanitizedSipDay === null) {
+                return res.status(400).json({ error: 'Type, investmentName, monthlyAmount (>0), and sipDay (1-31) are required' });
             }
 
             const result = await query(
-                `UPDATE investments
-                 SET type = $1, name = $2, amount = $3, return_pct = $4
+                `UPDATE sips
+                 SET type = $1, investment_name = $2, monthly_amount = $3, sip_day = $4
                  WHERE id = $5 AND user_id = $6
-                 RETURNING id, type, name, amount, return_pct as "returnPct"`,
-                [sanitizedType, sanitizedName, sanitizedAmount, sanitizedReturnPct, parsedId, userId]
+                 RETURNING id, type, investment_name as "investmentName", monthly_amount as "monthlyAmount", sip_day as "sipDay"`,
+                [sanitizedType, sanitizedInvestmentName, sanitizedMonthlyAmount, sanitizedSipDay, parsedId, userId]
             );
 
             if (result.rows.length === 0) {
-                return res.status(404).json({ error: 'Investment not found' });
+                return res.status(404).json({ error: 'SIP not found' });
             }
 
             return res.status(200).json(result.rows[0]);
@@ -105,7 +101,11 @@ module.exports = async (req, res) => {
 
         if (req.method === 'DELETE') {
             const { id } = req.query;
-            if (!id) return res.status(400).json({ error: 'Missing ID' });
+            const parsedId = Number(id);
+            if (!Number.isInteger(parsedId) || parsedId <= 0) {
+                return res.status(400).json({ error: 'Valid ID is required' });
+            }
+
             const rawPassword = String(req.body?.password || '').trim();
             if (!rawPassword) {
                 return res.status(400).json({ error: 'Password is required' });
@@ -120,13 +120,13 @@ module.exports = async (req, res) => {
                 return res.status(400).json({ error: 'Incorrect password' });
             }
 
-            await query('DELETE FROM investments WHERE id = $1 AND user_id = $2', [id, userId]);
+            await query('DELETE FROM sips WHERE id = $1 AND user_id = $2', [parsedId, userId]);
             return res.status(200).json({ message: 'Deleted' });
         }
 
         return res.status(405).json({ error: 'Method not allowed' });
     } catch (err) {
-        console.error('Investments error:', err);
+        console.error('SIPs error:', err);
         return res.status(500).json({ error: 'Internal server error' });
     }
 };

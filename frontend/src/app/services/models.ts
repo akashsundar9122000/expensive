@@ -40,6 +40,14 @@ export interface Investment {
     returnPct?: number;
 }
 
+export interface Sip {
+    id: number;
+    type: string;
+    investmentName: string;
+    monthlyAmount: number;
+    sipDay: number;
+}
+
 export interface Budget {
     category: string;
     limitAmount: number;
