@@ -33,6 +33,7 @@ export class ExpenseService {
     private refreshQueued = false;
     private refreshTimer: ReturnType<typeof setTimeout> | null = null;
     private useBootstrapEndpoint = true;
+    private autoRecurringStoragePrefix = 'auto_recurring_charge';
 
     constructor(private authService: AuthService, private http: HttpClient) {
         this.authService.getCurrentUser().subscribe(user => {
@@ -115,6 +116,13 @@ export class ExpenseService {
                     this.stats.next(bootstrap.stats || this.getDefaultStats());
                     this.banks.next(bootstrap.banks || []);
                     this.user.next(bootstrap.user || null);
+                    this.processAutoRecurringCharges(
+                        bootstrap.transactions || [],
+                        bootstrap.subscriptions || [],
+                        bootstrap.sips || [],
+                        bootstrap.banks || [],
+                        bootstrap.user?.email || ''
+                    );
                     return;
                 }
             } catch (error) {
@@ -158,6 +166,165 @@ export class ExpenseService {
         } else {
             this.user.next(user);
         }
+
+        this.processAutoRecurringCharges(
+            transactions || [],
+            subscriptions || [],
+            sips || [],
+            bankList || [],
+            user?.email || ''
+        );
+    }
+
+    private processAutoRecurringCharges(
+        transactions: Transaction[],
+        subscriptions: Subscription[],
+        sips: Sip[],
+        banks: Bank[],
+        userEmail: string
+    ): void {
+        const availableBanks = Array.isArray(banks) ? banks : [];
+        if (availableBanks.length === 0) {
+            return;
+        }
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayIso = this.toIsoDate(today);
+        const markerPrefix = `${this.autoRecurringStoragePrefix}_${encodeURIComponent((userEmail || 'guest').trim().toLowerCase())}`;
+        const safeTransactions = Array.isArray(transactions) ? transactions : [];
+
+        const hasAutoTransaction = (
+            kind: 'SUB' | 'SIP',
+            id: number,
+            expectedSubCategory: string,
+            expectedCategory: string,
+            expectedAmount: number,
+            expectedBankName: string
+        ): boolean => {
+            const marker = `[AUTO-${kind}:${id}]`;
+            return safeTransactions.some((transaction) => {
+                const txDate = String(transaction.date || '');
+                const subCategory = String(transaction.subCategory || '');
+                const matchesLegacyMarker = subCategory.includes(marker);
+                const matchesPlainAutoShape =
+                    txDate.startsWith(todayIso)
+                    && String(transaction.category || '') === expectedCategory
+                    && Number(transaction.amount || 0) === expectedAmount
+                    && String(transaction.mode || '') === 'Bank'
+                    && subCategory === expectedSubCategory
+                    && String(transaction.bankName || '') === expectedBankName;
+
+                return txDate.startsWith(todayIso) && (matchesLegacyMarker || matchesPlainAutoShape);
+            });
+        };
+
+        (subscriptions || []).forEach((subscription) => {
+            const subscriptionId = Number(subscription.id);
+            const billingDay = Number(String(subscription.date || '').trim());
+            const amount = Number(subscription.amount);
+
+            if (!Number.isInteger(subscriptionId) || subscriptionId <= 0) return;
+            if (!Number.isInteger(billingDay) || billingDay < 1 || billingDay > 31) return;
+            if (!Number.isFinite(amount) || amount <= 0) return;
+
+            const dueDate = this.createClampedDate(today.getFullYear(), today.getMonth(), billingDay);
+            if (this.toIsoDate(dueDate) !== todayIso) return;
+
+            const bankName = this.resolveRecurringBankName(subscription.bankName, availableBanks);
+            if (!bankName) return;
+
+            const markerKey = `${markerPrefix}_${todayIso}_SUB_${subscriptionId}`;
+            const name = String(subscription.name || 'Subscription').trim();
+            if (hasAutoTransaction('SUB', subscriptionId, name, 'Bills', amount, bankName) || this.hasAutoChargeMarker(markerKey)) {
+                return;
+            }
+
+            this.setAutoChargeMarker(markerKey);
+            this.addTransaction(
+                {
+                    amount,
+                    category: 'Bills',
+                    subCategory: name,
+                    date: todayIso,
+                    mode: 'Bank'
+                },
+                bankName
+            );
+        });
+
+        (sips || []).forEach((sip) => {
+            const sipId = Number(sip.id);
+            const sipDay = Number(sip.sipDay);
+            const amount = Number(sip.monthlyAmount);
+
+            if (!Number.isInteger(sipId) || sipId <= 0) return;
+            if (!Number.isInteger(sipDay) || sipDay < 1 || sipDay > 31) return;
+            if (!Number.isFinite(amount) || amount <= 0) return;
+
+            const dueDate = this.createClampedDate(today.getFullYear(), today.getMonth(), sipDay);
+            if (this.toIsoDate(dueDate) !== todayIso) return;
+
+            const bankName = this.resolveRecurringBankName(sip.bankName, availableBanks);
+            if (!bankName) return;
+
+            const markerKey = `${markerPrefix}_${todayIso}_SIP_${sipId}`;
+            const investmentName = String(sip.investmentName || sip.type || 'SIP').trim();
+            if (hasAutoTransaction('SIP', sipId, investmentName, 'Finance', amount, bankName) || this.hasAutoChargeMarker(markerKey)) {
+                return;
+            }
+
+            this.setAutoChargeMarker(markerKey);
+            this.addTransaction(
+                {
+                    amount,
+                    category: 'Finance',
+                    subCategory: investmentName,
+                    date: todayIso,
+                    mode: 'Bank'
+                },
+                bankName
+            );
+        });
+    }
+
+    private resolveRecurringBankName(preferredBankName: string | undefined, banks: Bank[]): string {
+        const preferred = String(preferredBankName || '').trim();
+        if (preferred && (banks || []).some((bank) => bank.name === preferred)) {
+            return preferred;
+        }
+        return (banks || [])[0]?.name || '';
+    }
+
+    private hasAutoChargeMarker(key: string): boolean {
+        try {
+            return localStorage.getItem(key) === '1';
+        } catch {
+            return false;
+        }
+    }
+
+    private setAutoChargeMarker(key: string): void {
+        try {
+            localStorage.setItem(key, '1');
+        } catch {
+            // Ignore storage failures and continue.
+        }
+    }
+
+    private toIsoDate(date: Date): string {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    private createClampedDate(year: number, month: number, dayOfMonth: number): Date {
+        const lastDay = new Date(year, month + 1, 0).getDate();
+        const clampedDay = Math.min(dayOfMonth, lastDay);
+        const date = new Date(year, month, clampedDay);
+        date.setHours(0, 0, 0, 0);
+        return date;
     }
 
     private resetData() {
@@ -449,15 +616,15 @@ export class ExpenseService {
 
     updateBalance(bankName: string, amount: number) { this.refreshAllData(); }
 
-    saveBudget(category: string, limitAmount: number) {
-        this.http.post(`${this.apiUrl}/budgets`, { category, limitAmount }).subscribe({
+    saveBudget(category: string, limitAmount: number, month: number, year: number) {
+        this.http.post(`${this.apiUrl}/budgets`, { category, limitAmount, month, year }).subscribe({
             next: () => this.refreshAllData(),
             error: (err) => { console.error('Failed to save budget:', err); }
         });
     }
 
-    deleteBudget(category: string) {
-        this.http.delete(`${this.apiUrl}/budgets?category=${encodeURIComponent(category)}`).subscribe({
+    deleteBudget(category: string, month: number, year: number) {
+        this.http.delete(`${this.apiUrl}/budgets?category=${encodeURIComponent(category)}&month=${month}&year=${year}`).subscribe({
             next: () => this.refreshAllData(),
             error: (err) => { console.error('Failed to delete budget:', err); }
         });

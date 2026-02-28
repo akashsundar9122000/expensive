@@ -48,5 +48,6 @@ export const routes: Routes = [
         component: SettingsComponent,
         canActivate: [authGuard]
     },
-    { path: '', redirectTo: '/login', pathMatch: 'full' }
+    { path: '', redirectTo: '/login', pathMatch: 'full' },
+    { path: '**', redirectTo: '/login' }
 ];

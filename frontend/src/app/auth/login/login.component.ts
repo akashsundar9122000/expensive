@@ -43,7 +43,6 @@ export class LoginComponent {
         const rememberedLogin = this.authService.getRememberedLogin();
         if (rememberedLogin?.remember) {
             this.email = rememberedLogin.email || '';
-            this.password = rememberedLogin.password || '';
             this.rememberPassword = true;
         }
 
@@ -131,7 +130,12 @@ export class LoginComponent {
                 this.showForgotPasswordForm = false;
             },
             error: (err) => {
-                this.errorMessage = 'Unable to reset password. Please try again.';
+                const status = Number(err?.status || 0);
+                if (status === 401 || status === 403) {
+                    this.errorMessage = 'For security reasons, password reset requires an active signed-in session.';
+                } else {
+                    this.errorMessage = 'Unable to reset password. Please try again.';
+                }
                 console.error(err);
             }
         });

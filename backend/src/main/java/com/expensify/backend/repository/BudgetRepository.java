@@ -10,9 +10,9 @@ import java.util.Optional;
 public interface BudgetRepository extends JpaRepository<Budget, Long> {
     List<Budget> findByUser(User user);
 
-    Optional<Budget> findByUserAndCategory(User user, String category);
+    Optional<Budget> findByUserAndCategoryAndMonthAndYear(User user, String category, Integer month, Integer year);
 
-    void deleteByUserAndCategory(User user, String category);
+    void deleteByUserAndCategoryAndMonthAndYear(User user, String category, Integer month, Integer year);
 
     void deleteByUser(User user);
 }

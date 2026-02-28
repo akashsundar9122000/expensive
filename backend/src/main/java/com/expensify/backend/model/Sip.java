@@ -37,4 +37,7 @@ public class Sip {
 
     @Column(nullable = false)
     private Integer sipDay;
+
+    @Column(name = "bank_name")
+    private String bankName;
 }

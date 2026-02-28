@@ -439,9 +439,40 @@ import { DeleteConfirmModalComponent } from '../../shared/delete-confirm-modal/d
             padding: 24px;
         }
 
+      .profile-actions .input-group {
+        flex-wrap: wrap;
+      }
+
         .avatar-grid {
             grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
         }
+    }
+
+    @media (max-width: 480px) {
+      .profile-actions .input-group {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .profile-actions .input-group .primary-btn,
+      .profile-actions .input-group .outline-btn {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .setting-item {
+        align-items: flex-start;
+        gap: 10px;
+      }
+
+      .danger-outline-btn {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .confirm-actions {
+        flex-direction: column;
+      }
     }
   `]
 

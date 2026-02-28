@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     name TEXT NOT NULL,
     amount NUMERIC NOT NULL,
     date TEXT NOT NULL,
+    bank_name TEXT,
     icon TEXT,
     color TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -63,6 +64,7 @@ CREATE TABLE IF NOT EXISTS sips (
     investment_name TEXT NOT NULL,
     monthly_amount NUMERIC NOT NULL,
     sip_day INTEGER NOT NULL,
+    bank_name TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -72,7 +74,9 @@ CREATE TABLE IF NOT EXISTS budgets (
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     category TEXT NOT NULL,
     limit_amount NUMERIC NOT NULL,
-    UNIQUE(user_id, category)
+    month INTEGER NOT NULL DEFAULT EXTRACT(MONTH FROM CURRENT_DATE),
+    year INTEGER NOT NULL DEFAULT EXTRACT(YEAR FROM CURRENT_DATE),
+    UNIQUE(user_id, category, month, year)
 );
 
 -- User Preferences (Goals/Wealth)

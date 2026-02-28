@@ -4,9 +4,33 @@ const { query } = require('./_lib/db');
 const { generateToken, getEmailFromRequest, cors } = require('./_lib/auth');
 const { instrumentRequest } = require('./_lib/perf');
 
+const AUTH_RATE_WINDOW_MS = 15 * 60 * 1000;
+const AUTH_RATE_LIMIT = 10;
+const authAttemptCache = new Map();
+
+function getClientIp(req) {
+    const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    return forwarded || String(req.socket?.remoteAddress || 'unknown');
+}
+
+function isRateLimited(req, action) {
+    const key = `${action}:${getClientIp(req)}`;
+    const now = Date.now();
+    const existing = authAttemptCache.get(key);
+
+    if (!existing || existing.expiresAt <= now) {
+        authAttemptCache.set(key, { count: 1, expiresAt: now + AUTH_RATE_WINDOW_MS });
+        return false;
+    }
+
+    existing.count += 1;
+    authAttemptCache.set(key, existing);
+    return existing.count > AUTH_RATE_LIMIT;
+}
+
 module.exports = async (req, res) => {
     instrumentRequest(req, res, 'auth');
-    cors(res);
+    cors(req, res);
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     const path = String(req.url || '').split('?')[0].toLowerCase();
@@ -16,6 +40,10 @@ module.exports = async (req, res) => {
     // ROUTING: /api/auth/login
     if (isAction('login') && req.method === 'POST') {
         try {
+            if (isRateLimited(req, 'login')) {
+                return res.status(429).json({ error: 'Too many login attempts. Please try again later.' });
+            }
+
             const { email, password } = req.body;
             if (!email || !password) return res.status(400).json({ error: 'Missing fields' });
 
@@ -42,6 +70,10 @@ module.exports = async (req, res) => {
     // ROUTING: /api/auth/register
     if (isAction('register') && req.method === 'POST') {
         try {
+            if (isRateLimited(req, 'register')) {
+                return res.status(429).json({ error: 'Too many registration attempts. Please try again later.' });
+            }
+
             const { name, email, password } = req.body;
             if (!name || !email || !password) return res.status(400).json({ error: 'Missing fields' });
 
@@ -118,12 +150,25 @@ module.exports = async (req, res) => {
     // ROUTING: /api/auth/forgot-password
     if (isAction('forgot-password') && req.method === 'POST') {
         try {
+            if (isRateLimited(req, 'forgot-password')) {
+                return res.status(429).json({ error: 'Too many password reset attempts. Please try again later.' });
+            }
+
+            const authenticatedEmail = getEmailFromRequest(req);
+            if (!authenticatedEmail) {
+                return res.status(401).json({ error: 'Unauthorized' });
+            }
+
             const { email, newPassword } = req.body;
             if (!email || !newPassword || String(newPassword).trim().length < 6) {
                 return res.status(400).json({ error: 'Email and valid new password are required' });
             }
 
             const normalizedEmail = String(email).toLowerCase().trim();
+            if (normalizedEmail !== String(authenticatedEmail).toLowerCase().trim()) {
+                return res.status(403).json({ error: 'Forbidden' });
+            }
+
             const userResult = await query('SELECT id FROM users WHERE LOWER(email) = $1', [normalizedEmail]);
 
             if (userResult.rows.length > 0) {

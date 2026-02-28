@@ -1,4 +1,5 @@
 const { query } = require('./_lib/db');
+const { cors } = require('./_lib/auth');
 const { instrumentRequest } = require('./_lib/perf');
 
 const REQUIRED_TABLES = [
@@ -13,9 +14,9 @@ const REQUIRED_TABLES = [
 
 module.exports = async (req, res) => {
     instrumentRequest(req, res, 'health');
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    cors(req, res);
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
 
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });

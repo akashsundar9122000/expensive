@@ -13,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.security.Principal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
@@ -238,13 +239,33 @@ public class ExpenseController {
         User user = userRepository.findByEmail(principal.getName()).orElseThrow();
         String category = (String) body.get("category");
         BigDecimal limitAmount = new BigDecimal(body.get("limitAmount").toString());
-        return ResponseEntity.ok(expenseService.saveBudget(user, category, limitAmount));
+        Integer month = parseInteger(body.get("month"));
+        Integer year = parseInteger(body.get("year"));
+        return ResponseEntity.ok(expenseService.saveBudget(user, category, limitAmount, month, year));
     }
 
     @DeleteMapping("/budgets")
-    public ResponseEntity<Void> deleteBudget(@RequestParam String category, Principal principal) {
+    public ResponseEntity<Void> deleteBudget(
+            @RequestParam String category,
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year,
+            Principal principal) {
         User user = userRepository.findByEmail(principal.getName()).orElseThrow();
-        expenseService.deleteBudget(user, category);
+        LocalDate now = LocalDate.now();
+        Integer effectiveMonth = month != null ? month : now.getMonthValue();
+        Integer effectiveYear = year != null ? year : now.getYear();
+        expenseService.deleteBudget(user, category, effectiveMonth, effectiveYear);
         return ResponseEntity.ok().build();
+    }
+
+    private Integer parseInteger(Object raw) {
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(raw.toString());
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 }

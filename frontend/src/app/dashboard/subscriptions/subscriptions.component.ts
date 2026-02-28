@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ExpenseService } from '../../services/expense.service';
-import { Subscription, User } from '../../services/models';
+import { Subscription, User, Bank } from '../../services/models';
 import { Observable } from 'rxjs';
 import { SidebarComponent } from '../../shared/sidebar/sidebar.component';
 import { FormsModule } from '@angular/forms';
@@ -73,6 +73,7 @@ const POPULAR_SERVICES = [
               <h4>{{ s.name }}</h4>
               <div class="sub-amount">₹{{ s.amount | number:'1.0-0' }}<span>/mo</span></div>
               <span class="sub-date">Deducts on: <strong>{{ s.date || 'Not set' }}</strong></span>
+              <span class="sub-date">Bank: <strong>{{ s.bankName || 'N/A' }}</strong></span>
             </div>
           </div>
 
@@ -124,6 +125,14 @@ const POPULAR_SERVICES = [
           <label>Billing Date (Day of Month) *</label>
           <input type="number" [(ngModel)]="newSub.date" placeholder="e.g. 1, 15, 30..." min="1" max="31">
           <p class="hint">Day of month when amount will be deducted</p>
+        </div>
+        <div class="form-group">
+          <label>Bank Account *</label>
+          <select [(ngModel)]="newSub.bankName">
+            <option value="" disabled *ngIf="currentBanks.length === 0">No bank accounts available</option>
+            <option *ngFor="let bank of currentBanks" [value]="bank.name">{{ bank.name }}</option>
+          </select>
+          <p class="hint" *ngIf="currentBanks.length === 0">Please add a bank account first.</p>
         </div>
         <div class="form-group">
           <label>Accent Color</label>
@@ -211,10 +220,32 @@ const POPULAR_SERVICES = [
 
     @media (max-width: 768px) {
       .quick-grid { grid-template-columns: repeat(3, 1fr); }
+
+      .sub-top {
+        align-items: flex-start;
+      }
+
+      .sub-actions {
+        flex-shrink: 0;
+      }
+
+      .sub-card h4 {
+        word-break: break-word;
+      }
     }
 
     @media (max-width: 480px) {
       .quick-grid { grid-template-columns: repeat(2, 1fr); }
+
+      .sub-top {
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .sub-amount {
+        width: 100%;
+        font-size: 22px;
+      }
     }
 
   `]
@@ -222,6 +253,7 @@ const POPULAR_SERVICES = [
 export class SubscriptionsComponent implements OnInit {
   user$!: Observable<User | null>;
   subscriptions$!: Observable<Subscription[]>;
+  banks$!: Observable<Bank[]>;
   isMobileMenuOpen = false;
   showModal = false;
   isEditMode = false;
@@ -230,13 +262,22 @@ export class SubscriptionsComponent implements OnInit {
   subToDelete: Subscription | null = null;
   saveError = '';
   popularServices = POPULAR_SERVICES;
-  newSub = { name: '', amount: 0 as number, icon: 'ph-ticket', color: '#3B82F6', date: '' };
+  currentBanks: Bank[] = [];
+  newSub = { name: '', amount: 0 as number, icon: 'ph-ticket', color: '#3B82F6', date: '', bankName: '' };
 
   constructor(private expenseService: ExpenseService) { }
 
   ngOnInit() {
     this.user$ = this.expenseService.getUser();
     this.subscriptions$ = this.expenseService.getSubscriptions();
+    this.banks$ = this.expenseService.getBanks();
+
+    this.banks$.subscribe((banks) => {
+      this.currentBanks = banks || [];
+      if (this.currentBanks.length > 0 && !this.newSub.bankName) {
+        this.newSub.bankName = this.currentBanks[0].name;
+      }
+    });
   }
 
   getTotalMonthly(subs: Subscription[]): number {
@@ -259,7 +300,14 @@ export class SubscriptionsComponent implements OnInit {
   }
 
   resetForm() {
-    this.newSub = { name: '', amount: 0, icon: 'ph-ticket', color: '#3B82F6', date: '' };
+    this.newSub = {
+      name: '',
+      amount: 0,
+      icon: 'ph-ticket',
+      color: '#3B82F6',
+      date: '',
+      bankName: this.currentBanks[0]?.name || ''
+    };
     this.saveError = '';
   }
 
@@ -278,7 +326,8 @@ export class SubscriptionsComponent implements OnInit {
       amount: sub.amount, 
       icon: sub.icon || 'ph-ticket', 
       color: sub.color, 
-      date: sub.date || '' 
+      date: sub.date || '',
+      bankName: sub.bankName || this.currentBanks[0]?.name || ''
     };
     this.saveError = '';
     this.showModal = true;
@@ -300,6 +349,12 @@ export class SubscriptionsComponent implements OnInit {
       this.saveError = 'Please enter a billing date (day of month).';
       return;
     }
+
+    const selectedBankName = String(this.newSub.bankName || '').trim();
+    if (!selectedBankName) {
+      this.saveError = 'Please select a bank account.';
+      return;
+    }
     
     const dateNum = parseInt(dateStr, 10);
     if (isNaN(dateNum) || dateNum < 1 || dateNum > 31) {
@@ -313,6 +368,7 @@ export class SubscriptionsComponent implements OnInit {
       name: this.newSub.name,
       amount: amount,
       date: dateStr,
+      bankName: selectedBankName,
       icon: this.newSub.icon,
       color: this.newSub.color
     };

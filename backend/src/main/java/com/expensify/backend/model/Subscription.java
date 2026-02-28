@@ -35,6 +35,9 @@ public class Subscription {
     @Column(nullable = true)
     private String date;
 
+    @Column(name = "bank_name")
+    private String bankName;
+
     private String icon;
     private String color;
 }

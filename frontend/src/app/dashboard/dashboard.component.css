@@ -215,17 +215,18 @@
 .set-budget-pill {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
     background: rgba(16, 185, 129, 0.1);
     border: 1px solid rgba(16, 185, 129, 0.3);
     color: var(--success-green);
     border-radius: 20px;
-    padding: 5px 12px;
-    font-size: 12px;
+    padding: 3px 8px;
+    font-size: 10px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
     white-space: nowrap;
+    margin-top: -6px;
 }
 
 .set-budget-pill:hover {
@@ -236,7 +237,33 @@
     display: flex;
     flex-direction: column;
     align-items: flex-end;
+    justify-content: flex-start;
     gap: 6px;
+    margin-left: auto;
+    align-self: flex-start;
+}
+
+.budget-filter-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.budget-month-filter {
+    border: 1px solid var(--border-light);
+    border-radius: 20px;
+    background: var(--bg-input);
+    color: var(--text-dark);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    outline: none;
+    min-width: 58px;
+}
+
+.budget-month-filter:focus {
+    border-color: var(--primary-blue);
+    box-shadow: 0 0 0 2px var(--primary-blue-light);
 }
 
 /* --- Stat Body Text --- */
@@ -410,6 +437,19 @@
     font-weight: 500;
 }
 
+.budget-card-title .budget-month-chip {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    margin: 0 0 2px 0;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--primary-blue);
+    background: var(--primary-blue-light);
+}
+
 .budget-card-actions {
     display: flex;
     gap: 4px;
@@ -419,6 +459,12 @@
 
 .budget-card-item:hover .budget-card-actions {
     opacity: 1;
+}
+
+@media (hover: none), (pointer: coarse) {
+    .budget-card-actions {
+        opacity: 1;
+    }
 }
 
 .action-btn {
@@ -1069,6 +1115,16 @@ td b {
     gap: 16px;
 }
 
+.budget-modal-form {
+    gap: 14px;
+}
+
+.budget-period-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
 .form-row {
     display: flex;
     gap: 16px;
@@ -1114,6 +1170,17 @@ td b {
     background: var(--bg-input);
     color: var(--text-dark);
     transition: all var(--transition-fast);
+}
+
+.budget-modal-form input,
+.budget-modal-form select {
+    padding: 11px 14px;
+    font-size: 13px;
+    line-height: 1.2;
+}
+
+.budget-modal-form select {
+    text-overflow: ellipsis;
 }
 
 .modal-form input:focus,
@@ -1633,6 +1700,38 @@ form textarea:focus {
 
     .view-all {
         font-size: 12px;
+    }
+}
+
+@media (max-width: 375px) {
+    .top-header h1 {
+        font-size: 14px;
+    }
+
+    .stat-body h3 {
+        font-size: 20px;
+    }
+
+    .bar-chart-container {
+        height: 160px;
+    }
+
+    .bar-col {
+        width: 24px;
+    }
+
+    .bar {
+        width: 16px;
+    }
+
+    .donut-chart {
+        width: 116px;
+        height: 116px;
+    }
+
+    .donut-hole {
+        width: 88px;
+        height: 88px;
     }
 }
 

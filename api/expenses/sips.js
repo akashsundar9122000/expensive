@@ -5,7 +5,7 @@ const { instrumentRequest } = require('../_lib/perf');
 
 module.exports = async (req, res) => {
     instrumentRequest(req, res, 'expenses.sips');
-    cors(res);
+    cors(req, res);
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     const requiresPassword = req.method === 'DELETE';
@@ -30,36 +30,38 @@ module.exports = async (req, res) => {
 
         if (req.method === 'GET') {
             const result = await query(
-                "SELECT id, type, COALESCE(investment_name, '') as \"investmentName\", monthly_amount as \"monthlyAmount\", sip_day as \"sipDay\" FROM sips WHERE user_id = $1 ORDER BY created_at DESC, id DESC",
+                "SELECT id, type, COALESCE(investment_name, '') as \"investmentName\", monthly_amount as \"monthlyAmount\", sip_day as \"sipDay\", bank_name as \"bankName\" FROM sips WHERE user_id = $1 ORDER BY created_at DESC, id DESC",
                 [userId]
             );
             return res.status(200).json(result.rows);
         }
 
         if (req.method === 'POST') {
-            const { type, investmentName, monthlyAmount, sipDay } = req.body || {};
+            const { type, investmentName, monthlyAmount, sipDay, bankName } = req.body || {};
             const sanitizedType = String(type || '').trim();
             const sanitizedInvestmentName = String(investmentName || '').trim();
+            const sanitizedBankName = String(bankName || '').trim();
             const sanitizedMonthlyAmount = parsePositiveAmount(monthlyAmount);
             const sanitizedSipDay = parseSipDay(sipDay);
 
-            if (!sanitizedType || !sanitizedInvestmentName || sanitizedMonthlyAmount === null || sanitizedSipDay === null) {
-                return res.status(400).json({ error: 'Type, investmentName, monthlyAmount (>0), and sipDay (1-31) are required' });
+            if (!sanitizedType || !sanitizedInvestmentName || !sanitizedBankName || sanitizedMonthlyAmount === null || sanitizedSipDay === null) {
+                return res.status(400).json({ error: 'Type, investmentName, bankName, monthlyAmount (>0), and sipDay (1-31) are required' });
             }
 
             const result = await query(
-                'INSERT INTO sips (user_id, type, investment_name, monthly_amount, sip_day) VALUES ($1, $2, $3, $4, $5) RETURNING id, type, investment_name as "investmentName", monthly_amount as "monthlyAmount", sip_day as "sipDay"',
-                [userId, sanitizedType, sanitizedInvestmentName, sanitizedMonthlyAmount, sanitizedSipDay]
+                'INSERT INTO sips (user_id, type, investment_name, monthly_amount, sip_day, bank_name) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, type, investment_name as "investmentName", monthly_amount as "monthlyAmount", sip_day as "sipDay", bank_name as "bankName"',
+                [userId, sanitizedType, sanitizedInvestmentName, sanitizedMonthlyAmount, sanitizedSipDay, sanitizedBankName]
             );
 
             return res.status(200).json(result.rows[0]);
         }
 
         if (req.method === 'PUT') {
-            const { id, type, investmentName, monthlyAmount, sipDay } = req.body || {};
+            const { id, type, investmentName, monthlyAmount, sipDay, bankName } = req.body || {};
             const parsedId = Number(id);
             const sanitizedType = String(type || '').trim();
             const sanitizedInvestmentName = String(investmentName || '').trim();
+            const sanitizedBankName = String(bankName || '').trim();
             const sanitizedMonthlyAmount = parsePositiveAmount(monthlyAmount);
             const sanitizedSipDay = parseSipDay(sipDay);
 
@@ -67,16 +69,16 @@ module.exports = async (req, res) => {
                 return res.status(400).json({ error: 'Valid ID is required' });
             }
 
-            if (!sanitizedType || !sanitizedInvestmentName || sanitizedMonthlyAmount === null || sanitizedSipDay === null) {
-                return res.status(400).json({ error: 'Type, investmentName, monthlyAmount (>0), and sipDay (1-31) are required' });
+            if (!sanitizedType || !sanitizedInvestmentName || !sanitizedBankName || sanitizedMonthlyAmount === null || sanitizedSipDay === null) {
+                return res.status(400).json({ error: 'Type, investmentName, bankName, monthlyAmount (>0), and sipDay (1-31) are required' });
             }
 
             const result = await query(
                 `UPDATE sips
-                 SET type = $1, investment_name = $2, monthly_amount = $3, sip_day = $4
-                 WHERE id = $5 AND user_id = $6
-                 RETURNING id, type, investment_name as "investmentName", monthly_amount as "monthlyAmount", sip_day as "sipDay"`,
-                [sanitizedType, sanitizedInvestmentName, sanitizedMonthlyAmount, sanitizedSipDay, parsedId, userId]
+                 SET type = $1, investment_name = $2, monthly_amount = $3, sip_day = $4, bank_name = $5
+                 WHERE id = $6 AND user_id = $7
+                 RETURNING id, type, investment_name as "investmentName", monthly_amount as "monthlyAmount", sip_day as "sipDay", bank_name as "bankName"`,
+                [sanitizedType, sanitizedInvestmentName, sanitizedMonthlyAmount, sanitizedSipDay, sanitizedBankName, parsedId, userId]
             );
 
             if (result.rows.length === 0) {

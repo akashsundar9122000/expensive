@@ -4,7 +4,7 @@ const { instrumentRequest } = require('../_lib/perf');
 
 module.exports = async (req, res) => {
     instrumentRequest(req, res, 'expenses.bootstrap');
-    cors(res);
+        cors(req, res);
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     if (req.method !== 'GET') {
@@ -42,13 +42,13 @@ module.exports = async (req, res) => {
                  ORDER BY t.date DESC`,
                 [userId]
             ),
-            query('SELECT id, name, amount, date, icon, color FROM subscriptions WHERE user_id = $1 ORDER BY id DESC', [userId]),
+            query('SELECT id, name, amount, date, icon, color, bank_name as "bankName" FROM subscriptions WHERE user_id = $1 ORDER BY id DESC', [userId]),
             query('SELECT id, type, name, amount, return_pct as "returnPct" FROM investments WHERE user_id = $1 ORDER BY id DESC', [userId]),
             query(
-                'SELECT id, type, COALESCE(investment_name, \'\') as "investmentName", monthly_amount as "monthlyAmount", sip_day as "sipDay" FROM sips WHERE user_id = $1 ORDER BY created_at DESC, id DESC',
+                'SELECT id, type, COALESCE(investment_name, \'\') as "investmentName", monthly_amount as "monthlyAmount", sip_day as "sipDay", bank_name as "bankName" FROM sips WHERE user_id = $1 ORDER BY created_at DESC, id DESC',
                 [userId]
             ),
-            query('SELECT id, category, limit_amount as "limitAmount" FROM budgets WHERE user_id = $1 ORDER BY category ASC', [userId]),
+            query('SELECT id, category, limit_amount as "limitAmount", month, year FROM budgets WHERE user_id = $1 ORDER BY year DESC, month ASC, category ASC', [userId]),
             query('SELECT id, name, balance FROM bank_accounts WHERE user_id = $1 ORDER BY id ASC', [userId]),
             query('SELECT * FROM user_preferences WHERE user_id = $1', [userId]),
             query('SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE user_id = $1 AND date >= $2', [userId, monthStart]),

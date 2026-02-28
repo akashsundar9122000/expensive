@@ -58,14 +58,14 @@ export class NotificationService {
     /**
      * Add a budget exceeded notification
      */
-    addBudgetExceededNotification(category: string, spent: number, limit: number): void {
+    addBudgetExceededNotification(category: string, spent: number, limit: number, monthName: string, categoryKey?: string): void {
         this.addNotification({
             title: `Budget Exceeded: ${category}`,
-            message: `You've spent ₹${spent.toFixed(2)} out of ₹${limit.toFixed(2)} for ${category}`,
+            message: `Budget for ${category} is reached in ${monthName}. You've spent ₹${spent.toFixed(2)} out of ₹${limit.toFixed(2)}.`,
             type: 'budget-alert',
             icon: 'ph-warning',
             read: false,
-            category,
+            category: categoryKey || category,
             amount: spent,
             limit
         });

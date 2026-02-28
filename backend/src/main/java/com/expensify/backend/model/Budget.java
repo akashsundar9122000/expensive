@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "budgets")
@@ -28,4 +29,21 @@ public class Budget {
 
     @Column(nullable = false)
     private BigDecimal limitAmount;
+
+    @Column
+    private Integer month;
+
+    @Column
+    private Integer year;
+
+    @PrePersist
+    public void applyDefaultMonthYear() {
+        LocalDate now = LocalDate.now();
+        if (month == null || month < 1 || month > 12) {
+            month = now.getMonthValue();
+        }
+        if (year == null || year < 2000 || year > 3000) {
+            year = now.getYear();
+        }
+    }
 }

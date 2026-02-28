@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ExpenseService } from '../../services/expense.service';
-import { Investment, Sip, DashboardStats, User } from '../../services/models';
+import { Investment, Sip, DashboardStats, User, Bank } from '../../services/models';
 import { BehaviorSubject, Observable, combineLatest, map } from 'rxjs';
 import { SidebarComponent } from '../../shared/sidebar/sidebar.component';
 import { FormsModule } from '@angular/forms';
@@ -41,6 +41,7 @@ interface SipForm {
   investmentName: string;
   monthlyAmount: number | null;
   sipDay: number | null;
+  bankName: string;
 }
 
 const DEFAULT_NEW_INVESTMENT: InvestmentForm = {
@@ -54,7 +55,8 @@ const DEFAULT_NEW_SIP: SipForm = {
   type: 'Mutual Fund',
   investmentName: '',
   monthlyAmount: null,
-  sipDay: null
+  sipDay: null,
+  bankName: ''
 };
 
 @Component({
@@ -203,13 +205,19 @@ const DEFAULT_NEW_SIP: SipForm = {
           <div class="card" style="padding: 28px; margin-top: 24px;">
             <div class="flex-between" style="margin-bottom: 20px;">
               <h3>SIP Plans</h3>
-              <button class="primary-btn" (click)="openAddSipModal()">
-                <i class="ph ph-plus"></i> Add SIP
-              </button>
+              <div class="sip-header-actions">
+                <select class="sip-bank-filter" [(ngModel)]="selectedSipBank">
+                  <option value="All">All Banks</option>
+                  <option *ngFor="let bank of currentBanks" [value]="bank.name">{{ bank.name }}</option>
+                </select>
+                <button class="primary-btn" (click)="openAddSipModal()">
+                  <i class="ph ph-plus"></i> Add SIP
+                </button>
+              </div>
             </div>
 
-            <div *ngIf="data.sips && data.sips.length > 0">
-              <div class="sip-row" *ngFor="let sip of data.sips">
+            <div *ngIf="data.sips && data.sips.length > 0 && getFilteredSips(data.sips).length > 0">
+              <div class="sip-row" *ngFor="let sip of getFilteredSips(data.sips)">
                 <div class="inv-type-icon" [style.background]="getColor(sip.type).bg" [style.color]="getColor(sip.type).color">
                   <i class="ph" [ngClass]="getColor(sip.type).icon"></i>
                 </div>
@@ -218,6 +226,7 @@ const DEFAULT_NEW_SIP: SipForm = {
                   <span class="type-badge" [style.background]="getColor(sip.type).bg" [style.color]="getColor(sip.type).color">
                     {{ sip.type }} • Day {{ sip.sipDay }}
                   </span>
+                  <div class="sip-bank">Bank: {{ sip.bankName || 'N/A' }}</div>
                 </div>
                 <div class="inv-amount">₹{{ sip.monthlyAmount | number:'1.2-2' }}/mo</div>
                 <button class="icon-action" (click)="openEditSipModal(sip)" aria-label="Edit SIP">
@@ -232,6 +241,11 @@ const DEFAULT_NEW_SIP: SipForm = {
             <div class="empty-state" *ngIf="data.sips && data.sips.length === 0">
               <i class="ph ph-calendar"></i>
               <p>No SIP plans yet. Add your first SIP!</p>
+            </div>
+
+            <div class="empty-state" *ngIf="data.sips && data.sips.length > 0 && getFilteredSips(data.sips).length === 0">
+              <i class="ph ph-funnel-simple"></i>
+              <p>No SIPs found for selected bank.</p>
             </div>
           </div>
         </div>
@@ -257,7 +271,7 @@ const DEFAULT_NEW_SIP: SipForm = {
           <label>Name / Description</label>
           <input type="text" [(ngModel)]="newInvestment.name" placeholder="e.g. Nifty 50 Index Fund">
         </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div class="modal-grid-2">
           <div class="form-group">
             <label>Amount (₹)</label>
             <input type="number" [(ngModel)]="newInvestment.amount" placeholder="0">
@@ -294,7 +308,7 @@ const DEFAULT_NEW_SIP: SipForm = {
           <input type="text" [(ngModel)]="newSip.investmentName" [placeholder]="getSipInvestmentNamePlaceholder(newSip.type)">
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div class="modal-grid-2">
           <div class="form-group">
             <label>Monthly Amount (₹)</label>
             <input type="number" [(ngModel)]="newSip.monthlyAmount" placeholder="0">
@@ -303,6 +317,14 @@ const DEFAULT_NEW_SIP: SipForm = {
             <label>SIP Date (1-31)</label>
             <input type="number" min="1" max="31" [(ngModel)]="newSip.sipDay" placeholder="e.g. 5">
           </div>
+        </div>
+
+        <div class="form-group">
+          <label>Bank Account</label>
+          <select [(ngModel)]="newSip.bankName">
+            <option value="" disabled *ngIf="currentBanks.length === 0">No bank accounts available</option>
+            <option *ngFor="let bank of currentBanks" [value]="bank.name">{{ bank.name }}</option>
+          </select>
         </div>
 
         <button class="primary-btn" style="width: 100%; justify-content: center; margin-top: 8px;" (click)="saveSip()"
@@ -345,6 +367,7 @@ const DEFAULT_NEW_SIP: SipForm = {
     .inv-details { flex: 1; }
     .inv-details h4 { font-size: 15px; margin-bottom: 4px; }
     .type-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
+    .sip-bank { margin-top: 6px; font-size: 12px; color: var(--text-muted); }
     .return-badge { background: rgba(16, 185, 129, 0.1); color: #10B981; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 20px; }
     .inv-amount { font-size: 16px; font-weight: 700; margin-right: 8px; color: var(--text-dark); }
     .icon-action { border: 1px solid var(--border-light); width: 32px; height: 32px; border-radius: 10px; background: var(--bg-main); color: var(--text-muted); cursor: pointer; }
@@ -358,8 +381,19 @@ const DEFAULT_NEW_SIP: SipForm = {
     .search-control { position: relative; }
     .search-control i { position: absolute; left: 10px; top: 12px; color: var(--text-muted); }
     .search-control input { padding-left: 34px; }
+    .modal-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
     .top-type { font-size: 12px; color: var(--text-muted); display: flex; gap: 8px; align-items: center; }
     .top-type strong { color: var(--text-dark); font-size: 12px; }
+    .sip-header-actions { display: flex; align-items: center; gap: 10px; }
+    .sip-bank-filter {
+      border: 1px solid var(--border-light);
+      background: var(--bg-main);
+      color: var(--text-dark);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 12px;
+      min-width: 140px;
+    }
 
     .category-breakdown { display: flex; flex-direction: column; gap: 16px; }
     .category-row { display: flex; align-items: center; gap: 16px; }
@@ -391,6 +425,15 @@ const DEFAULT_NEW_SIP: SipForm = {
         .menu-trigger {
             display: flex;
         }
+
+        .top-header .header-right {
+          gap: 10px;
+        }
+
+        .top-type {
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
         
         .investment-types-grid {
             grid-template-columns: repeat(3, 1fr);
@@ -421,11 +464,87 @@ const DEFAULT_NEW_SIP: SipForm = {
         .filter-bar {
           grid-template-columns: 1fr;
         }
+
+        .investment-row,
+        .sip-row {
+          flex-wrap: wrap;
+          row-gap: 10px;
+          column-gap: 12px;
+          align-items: flex-start;
+        }
+
+        .inv-details {
+          min-width: 0;
+          flex: 1 1 calc(100% - 56px);
+        }
+
+        .inv-details h4 {
+          word-break: break-word;
+        }
+
+        .inv-amount {
+          margin-left: auto;
+          margin-right: 0;
+          font-size: 15px;
+        }
+
+        .modal-grid-2 {
+          grid-template-columns: 1fr;
+          gap: 0;
+        }
+
+        .sip-header-actions {
+          width: 100%;
+          justify-content: space-between;
+        }
+
+        .sip-bank-filter {
+          flex: 1;
+          min-width: 0;
+        }
     }
 
     @media (max-width: 480px) {
         .investment-types-grid {
             grid-template-columns: repeat(2, 1fr);
+        }
+
+        .sip-header-actions {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 8px;
+        }
+
+        .sip-header-actions .primary-btn {
+          width: 100%;
+          justify-content: center;
+        }
+
+        .inv-amount {
+          width: 100%;
+          margin-left: 0;
+          text-align: right;
+        }
+    }
+
+    @media (max-width: 375px) {
+        .inv-type-icon {
+          width: 38px;
+          height: 38px;
+          font-size: 18px;
+        }
+
+        .inv-details h4 {
+          font-size: 14px;
+        }
+
+        .type-badge,
+        .sip-bank {
+          font-size: 11px;
+        }
+
+        .inv-amount {
+          font-size: 14px;
         }
     }
   `]
@@ -435,6 +554,7 @@ export class InvestmentsComponent implements OnInit {
   stats$!: Observable<DashboardStats>;
   investments$!: Observable<Investment[]>;
   sips$!: Observable<Sip[]>;
+  banks$!: Observable<Bank[]>;
   filteredInvestments$!: Observable<Investment[]>;
   investmentTypeOptions$!: Observable<string[]>;
   insights$!: Observable<InvestmentInsight>;
@@ -455,12 +575,14 @@ export class InvestmentsComponent implements OnInit {
   deleteError = '';
 
   investmentTypes = INVESTMENT_TYPES;
+  currentBanks: Bank[] = [];
   newInvestment: InvestmentForm = { ...DEFAULT_NEW_INVESTMENT };
   newSip: SipForm = { ...DEFAULT_NEW_SIP };
 
   searchTerm = '';
   selectedType = 'All';
   sortBy: SortOption = 'amount-desc';
+  selectedSipBank = 'All';
 
   private searchTerm$ = new BehaviorSubject<string>('');
   private selectedType$ = new BehaviorSubject<string>('All');
@@ -473,6 +595,14 @@ export class InvestmentsComponent implements OnInit {
     this.stats$ = this.expenseService.getStats();
     this.investments$ = this.expenseService.getInvestments();
     this.sips$ = this.expenseService.getSips();
+    this.banks$ = this.expenseService.getBanks();
+
+    this.banks$.subscribe((banks) => {
+      this.currentBanks = banks || [];
+      if (this.currentBanks.length > 0 && !this.newSip.bankName) {
+        this.newSip.bankName = this.currentBanks[0].name;
+      }
+    });
 
     this.filteredInvestments$ = combineLatest([
       this.investments$,
@@ -516,6 +646,14 @@ export class InvestmentsComponent implements OnInit {
     return (sum / total) * 100;
   }
 
+  getFilteredSips(sips: Sip[]): Sip[] {
+    const source = Array.isArray(sips) ? sips : [];
+    if (this.selectedSipBank === 'All') {
+      return source;
+    }
+    return source.filter((sip) => (sip.bankName || '') === this.selectedSipBank);
+  }
+
   canSaveInvestment(): boolean {
     const name = (this.newInvestment.name || '').trim();
     const amount = Number(this.newInvestment.amount);
@@ -550,12 +688,13 @@ export class InvestmentsComponent implements OnInit {
     const investmentName = (this.newSip.investmentName || '').trim();
     const amount = Number(this.newSip.monthlyAmount);
     const sipDay = Number(this.newSip.sipDay);
-    return !!this.newSip.type && !!investmentName && Number.isFinite(amount) && amount > 0 && Number.isInteger(sipDay) && sipDay >= 1 && sipDay <= 31;
+    const bankName = (this.newSip.bankName || '').trim();
+    return !!this.newSip.type && !!investmentName && !!bankName && Number.isFinite(amount) && amount > 0 && Number.isInteger(sipDay) && sipDay >= 1 && sipDay <= 31;
   }
 
   openAddSipModal() {
     this.editingSipId = null;
-    this.newSip = { ...DEFAULT_NEW_SIP };
+    this.newSip = { ...DEFAULT_NEW_SIP, bankName: this.currentBanks[0]?.name || '' };
     this.showSipModal = true;
   }
 
@@ -565,7 +704,8 @@ export class InvestmentsComponent implements OnInit {
       type: sip.type,
       investmentName: sip.investmentName || '',
       monthlyAmount: Number(sip.monthlyAmount || 0),
-      sipDay: Number(sip.sipDay || 1)
+      sipDay: Number(sip.sipDay || 1),
+      bankName: sip.bankName || this.currentBanks[0]?.name || ''
     };
     this.showSipModal = true;
   }
@@ -574,7 +714,7 @@ export class InvestmentsComponent implements OnInit {
     this.showSipModal = false;
     this.isSavingSip = false;
     this.editingSipId = null;
-    this.newSip = { ...DEFAULT_NEW_SIP };
+    this.newSip = { ...DEFAULT_NEW_SIP, bankName: this.currentBanks[0]?.name || '' };
   }
 
   private toSipPayload() {
@@ -582,7 +722,8 @@ export class InvestmentsComponent implements OnInit {
       type: this.newSip.type,
       investmentName: (this.newSip.investmentName || '').trim(),
       monthlyAmount: Number(this.newSip.monthlyAmount),
-      sipDay: Number(this.newSip.sipDay)
+      sipDay: Number(this.newSip.sipDay),
+      bankName: (this.newSip.bankName || '').trim()
     };
   }
 

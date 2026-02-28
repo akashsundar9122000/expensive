@@ -120,6 +120,7 @@ public class ExpenseService {
         existing.setIcon(updates.getIcon());
         existing.setColor(updates.getColor());
         existing.setDate(updates.getDate());
+        existing.setBankName(updates.getBankName());
 
         return subscriptionRepository.save(existing);
     }
@@ -197,6 +198,7 @@ public class ExpenseService {
         existing.setInvestmentName(updates.getInvestmentName());
         existing.setMonthlyAmount(updates.getMonthlyAmount());
         existing.setSipDay(updates.getSipDay());
+        existing.setBankName(updates.getBankName());
 
         return sipRepository.save(existing);
     }
@@ -266,20 +268,67 @@ public class ExpenseService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
+    @Transactional
     public List<Budget> getBudgets(User user) {
-        return budgetRepository.findByUser(user);
+        List<Budget> budgets = budgetRepository.findByUser(user);
+        if (budgets == null || budgets.isEmpty()) {
+            return budgets;
+        }
+
+        LocalDate now = LocalDate.now();
+        int currentMonth = now.getMonthValue();
+        int currentYear = now.getYear();
+        boolean hasUpdates = false;
+
+        for (Budget budget : budgets) {
+            Integer month = budget.getMonth();
+            Integer year = budget.getYear();
+
+            if (month == null || month < 1 || month > 12) {
+                budget.setMonth(currentMonth);
+                hasUpdates = true;
+            }
+            if (year == null || year < 2000 || year > 3000) {
+                budget.setYear(currentYear);
+                hasUpdates = true;
+            }
+        }
+
+        if (hasUpdates) {
+            try {
+                return budgetRepository.saveAll(budgets);
+            } catch (RuntimeException ex) {
+                return budgets;
+            }
+        }
+
+        return budgets;
     }
 
     @Transactional
-    public Budget saveBudget(User user, String category, BigDecimal limitAmount) {
-        Budget budget = budgetRepository.findByUserAndCategory(user, category)
-                .orElse(Budget.builder().user(user).category(category).build());
+    public Budget saveBudget(User user, String category, BigDecimal limitAmount, Integer month, Integer year) {
+        int normalizedMonth = month != null ? month : LocalDate.now().getMonthValue();
+        int normalizedYear = year != null ? year : LocalDate.now().getYear();
+
+        if (normalizedMonth < 1 || normalizedMonth > 12) {
+            throw new IllegalArgumentException("Month must be between 1 and 12");
+        }
+        if (normalizedYear < 2000 || normalizedYear > 3000) {
+            throw new IllegalArgumentException("Year must be between 2000 and 3000");
+        }
+
+        Budget budget = budgetRepository.findByUserAndCategoryAndMonthAndYear(user, category, normalizedMonth, normalizedYear)
+                .orElse(Budget.builder().user(user).category(category).month(normalizedMonth).year(normalizedYear).build());
         budget.setLimitAmount(limitAmount);
+        budget.setMonth(normalizedMonth);
+        budget.setYear(normalizedYear);
         return budgetRepository.save(budget);
     }
 
     @Transactional
-    public void deleteBudget(User user, String category) {
-        budgetRepository.deleteByUserAndCategory(user, category);
+    public void deleteBudget(User user, String category, Integer month, Integer year) {
+        int normalizedMonth = month != null ? month : LocalDate.now().getMonthValue();
+        int normalizedYear = year != null ? year : LocalDate.now().getYear();
+        budgetRepository.deleteByUserAndCategoryAndMonthAndYear(user, category, normalizedMonth, normalizedYear);
     }
 }

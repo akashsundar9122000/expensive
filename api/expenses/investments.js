@@ -5,7 +5,7 @@ const { instrumentRequest } = require('../_lib/perf');
 
 module.exports = async (req, res) => {
     instrumentRequest(req, res, 'expenses.investments');
-    cors(res);
+    cors(req, res);
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     const requiresPassword = req.method === 'DELETE';

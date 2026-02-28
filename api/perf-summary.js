@@ -1,14 +1,11 @@
 const { getPerfSummary, resetPerfSummary } = require('./_lib/perf');
-
-function cors(res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type,X-Perf-Key');
-}
+const { cors } = require('./_lib/auth');
 
 function isAuthorized(req) {
     const configured = String(process.env.PERF_ADMIN_KEY || '').trim();
-    if (!configured) return true;
+    if (!configured) {
+        return process.env.NODE_ENV !== 'production';
+    }
 
     const headerKey = String(req.headers['x-perf-key'] || '').trim();
     const queryKey = String(req.query?.key || '').trim();
@@ -16,7 +13,8 @@ function isAuthorized(req) {
 }
 
 module.exports = async (req, res) => {
-    cors(res);
+    cors(req, res);
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization,Content-Type,X-Perf-Key');
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     if (!isAuthorized(req)) {

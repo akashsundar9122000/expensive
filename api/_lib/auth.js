@@ -1,15 +1,43 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { query } = require('./db');
 
-const SECRET_KEY = process.env.JWT_SECRET || '404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970';
+const configuredSecret = String(process.env.JWT_SECRET || '').trim();
+const SECRET_KEY = configuredSecret || crypto.randomBytes(64).toString('hex');
+if (!configuredSecret) {
+    console.warn('[security] JWT_SECRET is not set; using an ephemeral runtime secret. Set JWT_SECRET in production.');
+}
+
+const JWT_ISSUER = String(process.env.JWT_ISSUER || 'expense-tracker-api').trim();
+
+const DEFAULT_ALLOWED_ORIGINS = [
+    'http://localhost:4200',
+    'http://127.0.0.1:4200',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000'
+];
+
+function getAllowedOrigins() {
+    const configured = String(process.env.ALLOWED_ORIGINS || '').trim();
+    if (!configured) return DEFAULT_ALLOWED_ORIGINS;
+
+    return configured
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean);
+}
 
 function generateToken(email, userId) {
-    return jwt.sign({ sub: email, uid: userId || undefined }, SECRET_KEY, { expiresIn: '24h' });
+    return jwt.sign(
+        { sub: email, uid: userId || undefined },
+        SECRET_KEY,
+        { expiresIn: '24h', algorithm: 'HS256', issuer: JWT_ISSUER }
+    );
 }
 
 function verifyToken(token) {
     try {
-        return jwt.verify(token, SECRET_KEY);
+        return jwt.verify(token, SECRET_KEY, { algorithms: ['HS256'], issuer: JWT_ISSUER });
     } catch (e) {
         return null;
     }
@@ -81,10 +109,23 @@ async function getUserFromRequest(req, { includePassword = false } = {}) {
     }
 }
 
-function cors(res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+function cors(reqOrRes, maybeRes) {
+    const req = maybeRes ? reqOrRes : null;
+    const res = maybeRes || reqOrRes;
+    const origin = req?.headers?.origin;
+    const allowedOrigins = getAllowedOrigins();
+
+    if (origin && allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Vary', 'Origin');
+    }
+
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Authorization,Content-Type');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Cache-Control', 'no-store');
 }
 
 module.exports = { generateToken, verifyToken, getAuthContextFromRequest, getEmailFromRequest, getUserFromRequest, cors };

@@ -489,7 +489,7 @@ import { Bank } from '../../services/models';
     .card-meta-right .value { max-width: 170px; }
     .preview-card { margin-bottom: 18px; }
     .card-entry-wrap { margin-top: 4px; }
-    .inline-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .inline-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
     .helper-text { margin: 4px 0 0; font-size: 12px; color: var(--text-muted); }
     .error-text { margin: 4px 0 0; font-size: 12px; color: #ef4444; font-weight: 600; }
     .cvv-auth-modal { max-width: 420px; }
@@ -557,6 +557,17 @@ import { Bank } from '../../services/models';
       visibility: visible;
       pointer-events: auto;
     }
+
+    @media (hover: none), (pointer: coarse) {
+      .card-actions,
+      .bank-card-actions {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        transform: none;
+      }
+    }
+
     .bank-icon-btn {
       width: 28px;
       height: 28px;
@@ -615,6 +626,16 @@ import { Bank } from '../../services/models';
         display: flex;
       }
 
+        .cards-header-actions {
+          width: 100%;
+          justify-content: flex-start;
+        }
+
+        .bank-filter-select {
+          min-width: 0;
+          width: 100%;
+        }
+
         .premium-card {
           padding: 24px;
           height: 240px;
@@ -647,6 +668,53 @@ import { Bank } from '../../services/models';
         .inline-fields {
             grid-template-columns: 1fr;
             gap: 0;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .saved-card-details {
+          flex-wrap: wrap;
+        }
+
+        .card-meta-left,
+        .card-meta-right {
+          min-width: 0;
+          width: 100%;
+          text-align: left;
+          align-items: flex-start;
+        }
+
+        .card-meta-right .value,
+        .bank-detail .value {
+          max-width: 100%;
+        }
+    }
+
+    @media (max-width: 375px) {
+        .premium-card {
+          padding: 16px;
+          height: 220px;
+        }
+
+        .saved-card {
+          height: 230px;
+          min-height: 230px;
+          padding: 16px;
+        }
+
+        .card-number {
+          font-size: 18px;
+          letter-spacing: 1px;
+          margin: 10px 0;
+        }
+
+        .saved-card-number {
+          font-size: 17px;
+        }
+
+        .card-name-text,
+        .detail .value {
+          font-size: 12px;
         }
     }
   `]

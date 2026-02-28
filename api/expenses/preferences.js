@@ -4,7 +4,7 @@ const { instrumentRequest } = require('../_lib/perf');
 
 module.exports = async (req, res) => {
     instrumentRequest(req, res, 'expenses.preferences');
-    cors(res);
+    cors(req, res);
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     const user = await getUserFromRequest(req);

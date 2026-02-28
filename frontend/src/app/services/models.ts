@@ -28,6 +28,7 @@ export interface Subscription {
     name: string;
     date: string;
     amount: number;
+    bankName?: string;
     icon?: string | null;
     color: string;
 }
@@ -46,11 +47,14 @@ export interface Sip {
     investmentName: string;
     monthlyAmount: number;
     sipDay: number;
+    bankName?: string;
 }
 
 export interface Budget {
     category: string;
     limitAmount: number;
+    month: number;
+    year: number;
 }
 
 

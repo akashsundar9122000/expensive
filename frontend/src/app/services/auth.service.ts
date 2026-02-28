@@ -46,7 +46,6 @@ export class AuthService {
                         if (rememberPassword) {
                             localStorage.setItem(this.rememberedLoginKey, JSON.stringify({
                                 email: normalizedEmail,
-                                password,
                                 remember: true
                             }));
                         } else {
@@ -92,7 +91,7 @@ export class AuthService {
         );
     }
 
-    getRememberedLogin(): { email: string; password: string; remember: boolean } | null {
+    getRememberedLogin(): { email: string; remember: boolean } | null {
         const saved = localStorage.getItem(this.rememberedLoginKey);
         if (!saved) {
             return null;

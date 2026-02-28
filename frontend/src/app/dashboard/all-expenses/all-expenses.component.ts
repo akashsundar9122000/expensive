@@ -1,8 +1,8 @@
 import { Component, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ExpenseService } from '../../services/expense.service';
-import { Transaction, User, Bank } from '../../services/models';
-import { Observable, combineLatest, map, BehaviorSubject, take } from 'rxjs';
+import { Transaction, User, Bank, Budget } from '../../services/models';
+import { Observable, combineLatest, map, BehaviorSubject, take, skip } from 'rxjs';
 import { SidebarComponent } from '../../shared/sidebar/sidebar.component';
 import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { DeleteConfirmModalComponent } from '../../shared/delete-confirm-modal/delete-confirm-modal.component';
@@ -11,7 +11,7 @@ import html2canvas from 'html2canvas';
 import 'jspdf-autotable';
 import autoTable from 'jspdf-autotable';
 import Chart from 'chart.js/auto';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 @Component({
   selector: 'app-all-expenses',
@@ -56,6 +56,10 @@ import * as XLSX from 'xlsx';
 
         <div class="dashboard-body">
           <div class="card table-card">
+            <button *ngIf="canViewBudgetPreview()" class="outline-btn view-budget-top-btn" (click)="toggleBudgetPreview()">
+              <i class="ph ph-wallet"></i> View Budget
+            </button>
+
             <div class="filter-section-wrapper">
               <div class="filter-tabs">
                 <button class="filter-tab" 
@@ -83,7 +87,17 @@ import * as XLSX from 'xlsx';
               <div class="filter-controls">
                 <div class="filter-group hide-mobile" style="min-width: 140px;">
                   <label style="font-size: 12px; color: var(--text-muted); margin-right: 6px;">Month:</label>
-                  <input type="month" (ngModelChange)="updateMonth($event)" [ngModel]="monthFilter$ | async" style="width: 100px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border-light); background: var(--bg-card); font-size: 11px; box-sizing: border-box;">
+                  <select (ngModelChange)="updateMonth($event)" [ngModel]="monthFilter$ | async" style="width: 84px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border-light); background: var(--bg-card); font-size: 11px; box-sizing: border-box;">
+                    <option value="all">All</option>
+                    <option *ngFor="let monthOption of monthFilterOptions" [value]="monthOption.value">{{ monthOption.label }}</option>
+                  </select>
+                </div>
+                <div class="filter-group hide-mobile" style="min-width: 104px;">
+                  <label style="font-size: 12px; color: var(--text-muted); margin-right: 6px;">Year:</label>
+                  <select (ngModelChange)="updateYear($event)" [ngModel]="yearFilter$ | async" style="width: 82px; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border-light); background: var(--bg-card); font-size: 11px; box-sizing: border-box;">
+                    <option value="all">All</option>
+                    <option *ngFor="let yearOption of yearFilterOptions" [value]="yearOption">{{ yearOption }}</option>
+                  </select>
                 </div>
                 <div class="filter-group hide-mobile">
                   <label style="font-size: 12px; color: var(--text-muted); margin-right: 8px;">Bank:</label>
@@ -136,7 +150,7 @@ import * as XLSX from 'xlsx';
                         {{ t.category }}
                       </span>
                     </td>
-                    <td>{{ t.subCategory }}</td>
+                    <td>{{ getDisplayMerchant(t.subCategory) }}</td>
                     <td class="hide-mobile">
                       <span class="bank-chip">{{ getTransactionBank(t.id) || 'N/A' }}</span>
                     </td>
@@ -257,6 +271,82 @@ import * as XLSX from 'xlsx';
         </div>
     </div>
 
+    <div class="modal-overlay" *ngIf="showBudgetPreview" (click)="showBudgetPreview = false">
+      <div class="budget-popup-card" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>Budget • {{ getMonthLabel(monthFilter$ | async) }} {{ yearFilter$ | async }}</h3>
+          <div class="budget-popup-actions">
+            <button class="primary-btn add-budget-popup-btn" (click)="openAddBudgetModal()">
+              <i class="ph ph-plus"></i> Add Budget
+            </button>
+            <button class="close-btn" (click)="showBudgetPreview = false"><i class="ph ph-x"></i></button>
+          </div>
+        </div>
+
+        <div *ngIf="budgetPreviewItems.length > 0; else noBudgetPreview">
+          <div class="budget-preview-item" *ngFor="let item of budgetPreviewItems" [class.warning]="item.status === 'warning'" [class.danger]="item.status === 'danger'">
+            <div class="budget-preview-row">
+              <div class="budget-preview-main">
+                <span class="budget-preview-cat">{{ item.category }}</span>
+                <span class="budget-preview-val">₹{{ item.spent | number:'1.0-0' }} / ₹{{ item.limitAmount | number:'1.0-0' }}</span>
+              </div>
+              <div class="budget-preview-actions">
+                <button class="budget-action-btn" title="Edit budget" (click)="openEditBudgetModal(item)">
+                  <i class="ph ph-pencil"></i>
+                </button>
+                <button class="budget-action-btn danger" title="Delete budget" (click)="openBudgetDeleteConfirm(item)">
+                  <i class="ph ph-trash"></i>
+                </button>
+              </div>
+            </div>
+            <div class="budget-preview-progress-bg">
+              <div class="budget-preview-progress-fill" [style.width.%]="item.percent > 100 ? 100 : item.percent"></div>
+            </div>
+          </div>
+        </div>
+        <ng-template #noBudgetPreview>
+          <p class="no-data-msg" style="margin: 0;">No budget set for selected month.</p>
+        </ng-template>
+      </div>
+    </div>
+
+    <div class="modal-overlay" *ngIf="showAddBudgetModal" (click)="showAddBudgetModal = false">
+      <div class="modal-card" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <h3>{{ budgetFormMode === 'edit' ? 'Edit Budget' : 'Set Monthly Budget' }}</h3>
+          <button class="close-btn" (click)="showAddBudgetModal = false"><i class="ph ph-x"></i></button>
+        </div>
+        <div class="modal-body">
+          <form class="modal-form" (submit)="saveBudgetFromAllExpenses(); $event.preventDefault()">
+            <div class="form-group">
+              <label>Category</label>
+              <select [(ngModel)]="budgetFormCategory" name="budgetCategory" [disabled]="budgetFormMode === 'edit'">
+                <option value="Food & Grocery">Food & Grocery</option>
+                <option value="Education">Education</option>
+                <option value="Transport">Transport</option>
+                <option value="Shopping">Shopping</option>
+                <option value="Bills">Bills</option>
+                <option value="Entertainment">Entertainment</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Budget Period</label>
+              <input type="text" [value]="getSelectedBudgetPeriodLabel()" readonly>
+            </div>
+            <div class="form-group">
+              <label>Monthly Limit (₹)</label>
+              <input type="number" [(ngModel)]="budgetFormLimit" name="budgetLimit" placeholder="e.g. 5000">
+            </div>
+            <div class="modal-actions add-budget-actions">
+              <button type="button" class="outline-btn" (click)="showAddBudgetModal = false">Cancel</button>
+              <button type="button" class="primary-btn" (click)="saveBudgetFromAllExpenses()">{{ budgetFormMode === 'edit' ? 'Update Budget' : 'Save Budget' }}</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
     <div class="toast-container" *ngIf="toast.show" [class]="toast.type">
       <div class="toast-content">
         <i class="ph" [class]="toast.type === 'danger' ? 'ph-warning-octagon' : toast.type === 'warning' ? 'ph-warning' : 'ph-check-circle'"></i>
@@ -268,10 +358,19 @@ import * as XLSX from 'xlsx';
     <app-delete-confirm-modal
       [visible]="showDeleteConfirm"
       [title]="'Delete Expense?'"
-      [message]="'You are about to delete ' + (transactionToDelete?.subCategory || transactionToDelete?.category || 'this expense') + '. This action cannot be undone.'"
+      [message]="'You are about to delete ' + getDisplayMerchant(transactionToDelete?.subCategory || transactionToDelete?.category || 'this expense') + '. This action cannot be undone.'"
       [confirmText]="'Delete'"
       (closed)="cancelDelete()"
       (confirmed)="confirmDelete()">
+    </app-delete-confirm-modal>
+
+    <app-delete-confirm-modal
+      [visible]="showBudgetDeleteConfirm"
+      [title]="'Delete Budget?'"
+      [message]="'You are about to delete budget for ' + (budgetToDelete?.category || 'this category') + ' in ' + getSelectedBudgetPeriodLabel() + '. This action cannot be undone.'"
+      [confirmText]="'Delete'"
+      (closed)="cancelBudgetDelete()"
+      (confirmed)="confirmBudgetDelete()">
     </app-delete-confirm-modal>
   `,
   styles: [`
@@ -354,6 +453,35 @@ import * as XLSX from 'xlsx';
       flex-wrap: wrap;
     }
 
+    .view-budget-top-btn {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      z-index: 3;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      padding: 7px 12px;
+    }
+
+    .budget-popup-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .add-budget-popup-btn {
+      font-size: 12px;
+      padding: 6px 10px;
+      min-height: 30px;
+    }
+
+    .add-budget-actions {
+      display: flex;
+      gap: 12px;
+    }
+
     .filter-controls {
       display: flex;
       gap: 12px;
@@ -367,12 +495,119 @@ import * as XLSX from 'xlsx';
       align-items: center;
       flex-shrink: 0;
     }
+
+    .budget-popup-card {
+      background: var(--bg-card);
+      width: 520px;
+      max-width: 92%;
+      border-radius: 20px;
+      padding: 20px;
+      border: 1px solid var(--border-light);
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+
+    .budget-preview-item {
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: var(--bg-input);
+      border-left: 3px solid var(--success-green);
+      margin-bottom: 8px;
+    }
+
+    .budget-preview-item.warning { border-left-color: var(--warning-orange); }
+    .budget-preview-item.danger { border-left-color: var(--danger-red); }
+
+    .budget-preview-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+
+    .budget-preview-main {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .budget-preview-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      opacity: 0;
+      transition: opacity 0.18s ease;
+    }
+
+    .budget-preview-item:hover .budget-preview-actions {
+      opacity: 1;
+    }
+
+    @media (hover: none), (pointer: coarse) {
+      .budget-preview-actions {
+        opacity: 1;
+      }
+    }
+
+    .budget-action-btn {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .budget-action-btn:hover {
+      color: var(--primary-blue);
+      background: rgba(59, 130, 246, 0.12);
+    }
+
+    .budget-action-btn.danger:hover {
+      color: var(--danger-red);
+      background: rgba(239, 68, 68, 0.12);
+    }
+
+    .budget-preview-cat {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-dark);
+    }
+
+    .budget-preview-val {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .budget-preview-progress-bg {
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--bg-chip);
+      overflow: hidden;
+    }
+
+    .budget-preview-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--success-green), #34d399);
+      border-radius: 999px;
+    }
     
     .table-card {
       display: flex;
       flex-direction: column;
       gap: 16px;
       overflow: hidden;
+      position: relative;
     }
     
     .table-container {
@@ -510,7 +745,7 @@ import * as XLSX from 'xlsx';
 
     .grid-2 {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 16px;
     }
 
@@ -554,6 +789,7 @@ import * as XLSX from 'xlsx';
             flex-direction: column;
             align-items: flex-start;
             gap: 16px;
+          margin-top: 32px;
         }
 
         .filter-controls {
@@ -565,6 +801,16 @@ import * as XLSX from 'xlsx';
         .export-buttons {
             width: 100%;
             justify-content: space-around;
+        }
+
+        .view-budget-top-btn {
+          top: 10px;
+          right: 10px;
+        }
+
+        .view-budget-top-btn {
+          font-size: 11px;
+          padding: 6px 10px;
         }
 
         .filter-tabs {
@@ -591,6 +837,11 @@ import * as XLSX from 'xlsx';
             padding: 8px;
             border-radius: 50%;
         }
+
+        .grid-2 {
+          grid-template-columns: 1fr;
+          gap: 0;
+        }
     }
 
     @media (max-width: 480px) {
@@ -598,16 +849,40 @@ import * as XLSX from 'xlsx';
             display: none;
         }
     }
+
+    @media (max-width: 375px) {
+        .filter-controls-wrapper {
+          gap: 12px;
+          margin-top: 24px;
+        }
+
+        .export-buttons {
+          justify-content: space-between;
+          gap: 8px;
+        }
+
+        .export-btn {
+          padding: 7px;
+        }
+
+        .view-budget-top-btn {
+          font-size: 10px;
+          padding: 5px 8px;
+        }
+    }
   `]
 })
 export class AllExpensesComponent implements OnInit {
+  readonly monthFilterOptions = this.getMonthFilterOptions();
+  readonly yearFilterOptions = this.getYearFilterOptions();
   user$!: Observable<User | null>;
   banks$!: Observable<Bank[]>;
   searchQuery$ = new BehaviorSubject<string>('');
   categoryFilter$ = new BehaviorSubject<string>('All');
   bankFilter$ = new BehaviorSubject<string>('All');
   modeFilter$ = new BehaviorSubject<string>('All');
-  monthFilter$ = new BehaviorSubject<string>(this.getCurrentMonth());
+  monthFilter$ = new BehaviorSubject<string>(this.getCurrentMonthNumber());
+  yearFilter$ = new BehaviorSubject<string>(String(this.getCurrentYear()));
   isMobileMenuOpen = false;
   showModal = false;
   expenseForm!: FormGroup;
@@ -618,6 +893,16 @@ export class AllExpensesComponent implements OnInit {
   toast: { show: boolean; message: string; type: 'success' | 'warning' | 'danger' } = { show: false, message: '', type: 'success' };
   showDeleteConfirm = false;
   transactionToDelete: Transaction | null = null;
+  showBudgetPreview = false;
+  showAddBudgetModal = false;
+  showBudgetDeleteConfirm = false;
+  selectedBudgetSetMonth = this.getCurrentMonthNumber();
+  selectedBudgetSetYear = this.getCurrentYear();
+  budgetFormMode: 'add' | 'edit' = 'add';
+  budgetFormCategory = 'Food & Grocery';
+  budgetFormLimit: number | null = null;
+  budgetToDelete: { category: string; month: number; year: number } | null = null;
+  budgetPreviewItems: Array<{ category: string; limitAmount: number; spent: number; percent: number; status: 'success' | 'warning' | 'danger' }> = [];
 
   @ViewChild('chartsContainer') chartsContainer!: ElementRef;
   @ViewChild('categoryChart') categoryChart!: ElementRef;
@@ -665,9 +950,10 @@ export class AllExpensesComponent implements OnInit {
       this.categoryFilter$,
       this.bankFilter$,
       this.modeFilter$,
-      this.monthFilter$
+      this.monthFilter$,
+      this.yearFilter$
     ]).pipe(
-      map(([transactions, query, category, bank, mode, month]) => {
+      map(([transactions, query, category, bank, mode, month, year]) => {
         this.syncTransactionBankMap(transactions);
         return transactions.filter(t => {
           const matchesQuery = !query ||
@@ -676,7 +962,7 @@ export class AllExpensesComponent implements OnInit {
           const matchesCategory = category === 'All' || t.category === category;
           const matchesBank = bank === 'All' || this.getTransactionBank(t.id) === bank;
           const matchesMode = mode === 'All' || t.mode === mode;
-          const matchesMonth = !month || this.isTransactionInMonth(t.date, month);
+          const matchesMonth = this.isTransactionInMonthAndYear(t.date, month, year);
           return matchesQuery && matchesCategory && matchesBank && matchesMode && matchesMonth;
         });
       })
@@ -693,6 +979,17 @@ export class AllExpensesComponent implements OnInit {
 
   getCategoryColor(category: string) {
     return this.categoryColors[category] || { bg: 'rgba(100, 116, 139, 0.1)', color: '#64748B' };
+  }
+
+  getDisplayMerchant(subCategory: string | null | undefined): string {
+    const raw = String(subCategory || '').trim();
+    if (!raw) {
+      return 'N/A';
+    }
+
+    return raw
+      .replace(/^\[AUTO-(SUB|SIP):\d+\]\s*/i, '')
+      .trim() || raw;
   }
 
   trackById(index: number, item: Transaction) { return item.id; }
@@ -715,22 +1012,279 @@ export class AllExpensesComponent implements OnInit {
 
   updateMonth(month: string) {
     this.monthFilter$.next(month);
+    if (this.showBudgetPreview) {
+      this.rebuildBudgetPreview();
+    }
   }
 
-  private getCurrentMonth(): string {
-    const date = new Date();
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    return `${year}-${month}`;
+  updateYear(year: number | string) {
+    this.yearFilter$.next(String(year));
+    if (this.showBudgetPreview) {
+      this.rebuildBudgetPreview();
+    }
   }
 
-  private isTransactionInMonth(dateStr: string, monthStr: string): boolean {
+  canViewBudgetPreview(): boolean {
+    return (this.monthFilter$.value || '').toLowerCase() !== 'all' && (this.yearFilter$.value || '').toLowerCase() !== 'all';
+  }
+
+  toggleBudgetPreview() {
+    if (!this.canViewBudgetPreview()) {
+      this.showBudgetPreview = false;
+      this.showToast('Select a specific month and year to view budget.', 'warning');
+      return;
+    }
+
+    this.showBudgetPreview = !this.showBudgetPreview;
+    if (this.showBudgetPreview) {
+      this.rebuildBudgetPreview();
+    }
+  }
+
+  openAddBudgetModal() {
+    if (!this.canViewBudgetPreview()) {
+      this.showToast('Select a specific month and year first.', 'warning');
+      return;
+    }
+
+    this.selectedBudgetSetMonth = this.monthFilter$.value && this.monthFilter$.value !== 'all'
+      ? this.monthFilter$.value
+      : this.getCurrentMonthNumber();
+
+    this.selectedBudgetSetYear = this.yearFilter$.value && this.yearFilter$.value !== 'all'
+      ? Number(this.yearFilter$.value)
+      : this.getCurrentYear();
+
+    this.budgetFormMode = 'add';
+    this.budgetFormCategory = 'Food & Grocery';
+    this.budgetFormLimit = null;
+    this.showAddBudgetModal = true;
+  }
+
+  openEditBudgetModal(item: { category: string; limitAmount: number }) {
+    if (!this.canViewBudgetPreview()) {
+      this.showToast('Select a specific month and year first.', 'warning');
+      return;
+    }
+
+    this.budgetFormMode = 'edit';
+    this.budgetFormCategory = item.category;
+    this.budgetFormLimit = Number(item.limitAmount || 0);
+    this.showAddBudgetModal = true;
+  }
+
+  getSelectedBudgetPeriodLabel(): string {
+    if (!this.canViewBudgetPreview()) {
+      return 'Select month and year in filters first';
+    }
+    return `${this.getMonthLabel(this.monthFilter$.value)} ${this.yearFilter$.value}`;
+  }
+
+  saveBudgetFromAllExpenses() {
+    if (!this.canViewBudgetPreview()) {
+      this.showToast('Select a specific month and year first.', 'warning');
+      return;
+    }
+
+    const category = String(this.budgetFormCategory || '').trim();
+    const limit = Number(this.budgetFormLimit);
+    const month = this.monthFilter$.value;
+    const year = this.yearFilter$.value;
+    const parsedLimit = Number(limit);
+    const parsedMonth = Number(month);
+    const parsedYear = Number(year);
+
+    if (!category || !Number.isFinite(parsedLimit) || parsedLimit <= 0) {
+      this.showToast('Enter a valid budget amount and category.', 'warning');
+      return;
+    }
+    if (!Number.isInteger(parsedMonth) || parsedMonth < 1 || parsedMonth > 12) {
+      this.showToast('Select a valid budget month.', 'warning');
+      return;
+    }
+    if (!Number.isInteger(parsedYear) || parsedYear < 2000 || parsedYear > 3000) {
+      this.showToast('Select a valid budget year.', 'warning');
+      return;
+    }
+
+    this.expenseService.saveBudget(category, parsedLimit, parsedMonth, parsedYear);
+    this.showAddBudgetModal = false;
+    this.monthFilter$.next(String(parsedMonth).padStart(2, '0'));
+    this.yearFilter$.next(String(parsedYear));
+    this.showToast(this.budgetFormMode === 'edit' ? 'Budget updated successfully.' : 'Budget saved successfully.', 'success');
+
+    this.upsertBudgetPreviewItem(category, parsedLimit, parsedMonth, parsedYear);
+    this.syncBudgetPreviewAfterNextRefresh();
+  }
+
+  openBudgetDeleteConfirm(item: { category: string }) {
+    const month = Number(this.monthFilter$.value);
+    const year = Number(this.yearFilter$.value);
+    if (!Number.isInteger(month) || !Number.isInteger(year)) {
+      this.showToast('Select a specific month and year first.', 'warning');
+      return;
+    }
+
+    this.budgetToDelete = { category: item.category, month, year };
+    this.showBudgetDeleteConfirm = true;
+  }
+
+  cancelBudgetDelete() {
+    this.showBudgetDeleteConfirm = false;
+    this.budgetToDelete = null;
+  }
+
+  confirmBudgetDelete() {
+    if (!this.budgetToDelete) {
+      return;
+    }
+
+    const { category, month, year } = this.budgetToDelete;
+    this.expenseService.deleteBudget(category, month, year);
+    this.budgetPreviewItems = this.budgetPreviewItems.filter(item => item.category !== category);
+    this.cancelBudgetDelete();
+    this.showToast('Budget deleted successfully.', 'success');
+    this.syncBudgetPreviewAfterNextRefresh();
+  }
+
+  private syncBudgetPreviewAfterNextRefresh() {
+    this.expenseService.getBudgets().pipe(skip(1), take(1)).subscribe(() => {
+      if (this.showBudgetPreview) {
+        this.rebuildBudgetPreview();
+      }
+    });
+  }
+
+  private upsertBudgetPreviewItem(category: string, limitAmount: number, month: number, year: number) {
+    if (!this.showBudgetPreview) {
+      return;
+    }
+
+    this.expenseService.getTransactions().pipe(take(1)).subscribe((transactions) => {
+      const spent = (transactions || [])
+        .filter((transaction) => {
+          const transactionDate = transaction.date ? new Date(transaction.date) : null;
+          return !!transactionDate
+            && !Number.isNaN(transactionDate.getTime())
+            && transactionDate.getFullYear() === year
+            && (transactionDate.getMonth() + 1) === month
+            && transaction.category === category
+            && (transaction.type === 'Expense' || !transaction.type);
+        })
+        .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+
+      const percent = limitAmount > 0 ? (spent / limitAmount) * 100 : 0;
+      const newItem = {
+        category,
+        limitAmount,
+        spent,
+        percent,
+        status: (percent > 90 ? 'danger' : percent > 75 ? 'warning' : 'success') as 'success' | 'warning' | 'danger'
+      };
+
+      const existingIndex = this.budgetPreviewItems.findIndex(item => item.category === category);
+      if (existingIndex >= 0) {
+        this.budgetPreviewItems[existingIndex] = newItem;
+      } else {
+        this.budgetPreviewItems = [...this.budgetPreviewItems, newItem]
+          .sort((a, b) => a.category.localeCompare(b.category));
+      }
+    });
+  }
+
+  getMonthLabel(monthValue: string | null | undefined): string {
+    const value = String(monthValue || '').toLowerCase();
+    if (value === 'all') return 'All';
+    const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthIndex = Number(value);
+    return monthIndex >= 1 && monthIndex <= 12 ? labels[monthIndex - 1] : 'All';
+  }
+
+  private rebuildBudgetPreview() {
+    if (!this.canViewBudgetPreview()) {
+      this.budgetPreviewItems = [];
+      return;
+    }
+
+    const selectedMonth = Number(this.monthFilter$.value);
+    const selectedYear = Number(this.yearFilter$.value);
+
+    combineLatest([
+      this.expenseService.getBudgets().pipe(take(1)),
+      this.expenseService.getTransactions().pipe(take(1))
+    ]).subscribe(([budgets, transactions]) => {
+      const selectedBudgets = (budgets || []).filter((budget: Budget) =>
+        Number(budget.month) === selectedMonth && Number(budget.year) === selectedYear
+      );
+
+      const legacyBudgets = (budgets || []).filter((budget: Budget) =>
+        !Number.isFinite(Number((budget as any).month)) || !Number.isFinite(Number((budget as any).year))
+      );
+
+      const budgetByCategory = new Map<string, Budget>();
+      legacyBudgets.forEach((budget) => budgetByCategory.set(budget.category, budget));
+      selectedBudgets.forEach((budget) => budgetByCategory.set(budget.category, budget));
+
+      const budgetsForMonth = Array.from(budgetByCategory.values());
+
+      this.budgetPreviewItems = budgetsForMonth.map((budget: Budget) => {
+        const spent = (transactions || [])
+          .filter((transaction) => {
+            const transactionDate = transaction.date ? new Date(transaction.date) : null;
+            return !!transactionDate
+              && !Number.isNaN(transactionDate.getTime())
+              && transactionDate.getFullYear() === selectedYear
+              && (transactionDate.getMonth() + 1) === selectedMonth
+              && transaction.category === budget.category
+              && (transaction.type === 'Expense' || !transaction.type);
+          })
+          .reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+
+        const percent = budget.limitAmount > 0 ? (spent / budget.limitAmount) * 100 : 0;
+        return {
+          category: budget.category,
+          limitAmount: Number(budget.limitAmount || 0),
+          spent,
+          percent,
+          status: percent > 90 ? 'danger' : percent > 75 ? 'warning' : 'success'
+        };
+      });
+    });
+  }
+
+  private getMonthFilterOptions(): Array<{ value: string; label: string }> {
+    const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    return monthLabels.map((label, index) => ({
+      label,
+      value: String(index + 1).padStart(2, '0')
+    }));
+  }
+
+  private getYearFilterOptions(): number[] {
+    const currentYear = this.getCurrentYear();
+    return Array.from({ length: 6 }, (_, index) => currentYear - index);
+  }
+
+  private getCurrentYear(): number {
+    return new Date().getFullYear();
+  }
+
+  private getCurrentMonthNumber(): string {
+    return String(new Date().getMonth() + 1).padStart(2, '0');
+  }
+
+  private isTransactionInMonthAndYear(dateStr: string, monthStr: string, year: string): boolean {
     try {
       const date = new Date(dateStr);
-      const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
-      const transactionMonth = `${year}-${month}`;
-      return transactionMonth === monthStr;
+      const selectedMonth = String(monthStr || '').toLowerCase();
+      const selectedYear = String(year || '').toLowerCase();
+
+      const matchesMonth = selectedMonth === 'all' || month === selectedMonth;
+      const matchesYear = selectedYear === 'all' || String(date.getFullYear()) === selectedYear;
+
+      return matchesMonth && matchesYear;
     } catch (e) {
       return false;
     }
@@ -1038,8 +1592,16 @@ export class AllExpensesComponent implements OnInit {
       // Report Date and Month Filter
       doc.setFontSize(10);
       doc.setTextColor(107, 114, 128);
-      const monthValue = (this.monthFilter$ as BehaviorSubject<string>).value || 'All months';
-      doc.text(`Generated: ${new Date().toLocaleDateString()} | Period: ${monthValue}`, pageWidth / 2, yPosition, { align: 'center' });
+      const monthValue = String((this.monthFilter$ as BehaviorSubject<string>).value || 'all').toLowerCase();
+      const yearValue = String((this.yearFilter$ as BehaviorSubject<string>).value || 'all').toLowerCase();
+      const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const monthIndex = Number(monthValue);
+      const monthLabel = monthValue === 'all'
+        ? 'All months'
+        : (monthIndex >= 1 && monthIndex <= 12 ? monthLabels[monthIndex - 1] : 'All months');
+      const yearLabel = yearValue === 'all' ? 'All years' : yearValue;
+      const periodLabel = `${monthLabel} ${yearLabel}`;
+      doc.text(`Generated: ${new Date().toLocaleDateString()} | Period: ${periodLabel}`, pageWidth / 2, yPosition, { align: 'center' });
       yPosition += 15;
 
       // Summary Stats
@@ -1371,26 +1933,49 @@ export class AllExpensesComponent implements OnInit {
         'Percentage': ((bankData.data[idx] / totalAmount) * 100).toFixed(1) + '%'
       }));
 
-      // Create workbook with multiple sheets
-      const workbook = XLSX.utils.book_new();
+      const workbook = new ExcelJS.Workbook();
+      this.appendWorksheet(workbook, 'Summary', summaryData);
+      this.appendWorksheet(workbook, 'Transactions', transactionData);
+      this.appendWorksheet(workbook, 'Category Breakdown', categoryBreakdown);
+      this.appendWorksheet(workbook, 'Payment Mode', modeBreakdown);
+      this.appendWorksheet(workbook, 'Bank Details', bankBreakdown);
 
-      // Add sheets
-      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryData), 'Summary');
-      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(transactionData), 'Transactions');
-      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(categoryBreakdown), 'Category Breakdown');
-      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(modeBreakdown), 'Payment Mode');
-      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(bankBreakdown), 'Bank Details');
-
-      // Generate filename with date
       const fileName = `expenses_${new Date().toISOString().split('T')[0]}.xlsx`;
 
-      // Write file
-      XLSX.writeFile(workbook, fileName);
-      this.showToast('XLSX exported successfully!', 'success');
+      workbook.xlsx.writeBuffer().then((buffer) => {
+        const blob = new Blob([buffer], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = fileName;
+        anchor.click();
+        URL.revokeObjectURL(url);
+        this.showToast('XLSX exported successfully!', 'success');
+      });
     } catch (error) {
       console.error('XLSX Export Error:', error);
       this.showToast('Error exporting XLSX. Please try again.', 'danger');
     }
+  }
+
+  private appendWorksheet(workbook: ExcelJS.Workbook, sheetName: string, rows: Record<string, string | number>[]) {
+    const sheet = workbook.addWorksheet(sheetName);
+    if (!rows.length) {
+      return;
+    }
+
+    const headers = Object.keys(rows[0]);
+    sheet.addRow(headers);
+    rows.forEach((row) => {
+      sheet.addRow(headers.map((key) => row[key]));
+    });
+
+    sheet.getRow(1).font = { bold: true };
+    headers.forEach((_, index) => {
+      sheet.getColumn(index + 1).width = 20;
+    });
   }
 
   showToast(message: string, type: 'success' | 'warning' | 'danger' = 'success') {

@@ -390,6 +390,65 @@ import { NotificationService } from '../../services/notification.service';
           justify-content: center;
         }
     }
+
+    @media (max-width: 480px) {
+        .fund-action {
+          width: 100%;
+          align-items: stretch;
+        }
+
+        .fund-input-group,
+        .fund-input-group input {
+          width: 100%;
+        }
+
+        .fund-action .primary-btn,
+        .fund-action .ghost-btn {
+          width: 100%;
+          justify-content: center;
+        }
+
+        .circular-progress-large {
+          width: 170px;
+          height: 170px;
+        }
+
+        .circular-progress-large::before {
+          width: 136px;
+          height: 136px;
+        }
+
+        .progress-inner .percent {
+          font-size: 30px;
+        }
+    }
+
+    @media (max-width: 375px) {
+        .goal-hero-card {
+          padding: 16px;
+        }
+
+        .goal-info h2 {
+          font-size: 22px;
+        }
+
+        .goal-stats-row {
+          gap: 18px;
+        }
+
+        .stat-item .value {
+          font-size: 17px;
+        }
+
+        .quick-fund {
+          gap: 6px;
+        }
+
+        .chip-btn {
+          padding: 5px 8px;
+          font-size: 11px;
+        }
+    }
   `]
 })
 export class GoalsComponent implements OnInit {

@@ -7,7 +7,7 @@ import { FormsModule } from '@angular/forms';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="modal-overlay" *ngIf="visible" (click)="closed.emit()">
+    <div class="modal-overlay delete-confirm-overlay" *ngIf="visible" (click)="closed.emit()">
       <div class="modal-card" (click)="$event.stopPropagation()">
         <div class="modal-header">
           <h3>{{ title }}</h3>
@@ -32,11 +32,10 @@ import { FormsModule } from '@angular/forms';
           {{ errorMessage }}
         </p>
 
-        <div style="display:flex; gap: 12px;">
-          <button class="outline-btn" style="flex: 1;" (click)="closed.emit()">{{ cancelText }}</button>
+        <div class="confirm-actions-row">
+          <button class="outline-btn action-btn" (click)="closed.emit()">{{ cancelText }}</button>
           <button
-            class="primary-btn"
-            style="flex: 1; justify-content: center; background: #ef4444;"
+            class="primary-btn action-btn delete-action-btn"
             (click)="confirmed.emit(password)"
             [disabled]="isProcessing || (requirePassword && !password.trim())"
           >
@@ -45,7 +44,33 @@ import { FormsModule } from '@angular/forms';
         </div>
       </div>
     </div>
-  `
+  `,
+  styles: [`
+    .delete-confirm-overlay {
+      z-index: 4000;
+    }
+
+    .confirm-actions-row {
+      display: flex;
+      gap: 12px;
+    }
+
+    .action-btn {
+      flex: 1;
+      justify-content: center;
+      min-height: 42px;
+    }
+
+    .delete-action-btn {
+      background: #ef4444;
+    }
+
+    @media (max-width: 420px) {
+      .confirm-actions-row {
+        flex-direction: column;
+      }
+    }
+  `]
 })
 export class DeleteConfirmModalComponent {
   @Input() visible = false;

@@ -22,6 +22,21 @@ import 'jspdf-autotable';
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class DashboardComponent implements OnInit, OnDestroy {
+    readonly monthOptions = [
+        { value: 1, label: 'January' },
+        { value: 2, label: 'February' },
+        { value: 3, label: 'March' },
+        { value: 4, label: 'April' },
+        { value: 5, label: 'May' },
+        { value: 6, label: 'June' },
+        { value: 7, label: 'July' },
+        { value: 8, label: 'August' },
+        { value: 9, label: 'September' },
+        { value: 10, label: 'October' },
+        { value: 11, label: 'November' },
+        { value: 12, label: 'December' }
+    ];
+    readonly yearOptions = this.getBudgetYearOptions();
     currentTime = '';
     currentDate = '';
     greeting = '';
@@ -55,12 +70,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
     cachedTopCategoryPercent = 0;
     showBudgetEditModal = false;
     showDeleteConfirmModal = false;
-    editingBudget: { category: string; limitAmount: number } | null = null;
-    deletingBudgetCategory: string | null = null;
+    editingBudget: { category: string; limitAmount: number; month: number; year: number } | null = null;
+    deletingBudget: { category: string; month: number; year: number } | null = null;
     notifiedBudgets: Set<string> = new Set();
     notifiedGoalMilestones: Set<number> = new Set();
     dueTomorrowSips: Sip[] = [];
     dashboardSearchTerm = '';
+    selectedBudgetMonth = new Date().getMonth() + 1;
+    selectedBudgetYear = new Date().getFullYear();
+    selectedBudgetSetMonth = new Date().getMonth() + 1;
+    selectedBudgetSetYear = new Date().getFullYear();
+    private latestTransactions: Transaction[] = [];
+    private latestBudgets: Budget[] = [];
 
     expenseForm!: FormGroup;
 
@@ -112,12 +133,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
             .pipe(takeUntil(this.destroy$))
             .subscribe(([txns, budgets]) => {
                 this.buildChartBars(txns);
-                // Cache top categories
-                this.cachedTopCategories = this.getTopCategories(txns || []);
-                this.cachedTopCategoryPercent = this.getTopCategoryPercent(txns || []);
-                if (budgets.length > 0) {
-                    this.cachedBudgetProgress = this.getBudgetProgress(txns || [], budgets || []);
-                }
+                this.latestTransactions = txns || [];
+                this.latestBudgets = budgets || [];
+                this.recomputeBudgetProgress();
+                this.recomputeTopCategories();
                 this.cdr.markForCheck();
             });
 
@@ -125,6 +144,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
             this.dueTomorrowSips = this.getSipsDueTomorrow(sips || []);
             this.checkSipReminders(sips || []);
             this.cdr.markForCheck();
+        });
+
+        this.subscriptions$.pipe(takeUntil(this.destroy$)).subscribe((subscriptions) => {
+            this.checkSubscriptionReminders(subscriptions || []);
         });
 
         this.banks$.pipe(takeUntil(this.destroy$)).subscribe(banks => {
@@ -204,6 +227,79 @@ export class DashboardComponent implements OnInit, OnDestroy {
         return transactions
             .filter(t => t.category === category && (t.type === 'Expense' || !t.type))
             .reduce((sum, t) => sum + t.amount, 0);
+    }
+
+    private getBudgetEditKey(category: string, month: number, year: number): string {
+        return `${category}_${month}_${year}`;
+    }
+
+    private normalizeBudgetMonth(month: number | null | undefined): number {
+        const parsedMonth = Number(month);
+        return Number.isInteger(parsedMonth) && parsedMonth >= 1 && parsedMonth <= 12
+            ? parsedMonth
+            : new Date().getMonth() + 1;
+    }
+
+    private normalizeBudgetYear(year: number | null | undefined): number {
+        const parsedYear = Number(year);
+        return Number.isInteger(parsedYear) && parsedYear >= 2000 && parsedYear <= 3000
+            ? parsedYear
+            : new Date().getFullYear();
+    }
+
+    private getBudgetYearOptions(): number[] {
+        const currentYear = new Date().getFullYear();
+        return Array.from({ length: 6 }, (_, index) => currentYear - 2 + index);
+    }
+
+    getMonthName(month: number | null | undefined): string {
+        const safeMonth = this.normalizeBudgetMonth(month);
+        const option = this.monthOptions.find(m => m.value === safeMonth);
+        return option ? option.label : 'Unknown';
+    }
+
+    onBudgetMonthFilterChange(month: number | string) {
+        const parsedMonth = Number(month);
+        this.selectedBudgetMonth = this.normalizeBudgetMonth(parsedMonth);
+        this.recomputeBudgetProgress();
+        this.recomputeTopCategories();
+        this.cdr.markForCheck();
+    }
+
+    onBudgetYearFilterChange(year: number | string) {
+        const parsedYear = Number(year);
+        this.selectedBudgetYear = this.normalizeBudgetYear(parsedYear);
+        this.recomputeBudgetProgress();
+        this.recomputeTopCategories();
+        this.cdr.markForCheck();
+    }
+
+    private recomputeBudgetProgress(): void {
+        const allProgress = this.getBudgetProgress(this.latestTransactions || [], this.latestBudgets || []);
+        this.cachedBudgetProgress = allProgress.filter((budget) =>
+            this.normalizeBudgetMonth(budget.month) === this.selectedBudgetMonth
+            && this.normalizeBudgetYear(budget.year) === this.selectedBudgetYear
+        );
+    }
+
+    private recomputeTopCategories(): void {
+        const monthlyTransactions = this.getTransactionsForMonthYear(this.latestTransactions || [], this.selectedBudgetMonth, this.selectedBudgetYear);
+        this.cachedTopCategories = this.getTopCategories(monthlyTransactions);
+        this.cachedTopCategoryPercent = this.getTopCategoryPercent(monthlyTransactions);
+    }
+
+    private getTransactionsForMonthYear(transactions: Transaction[], month: number, year: number): Transaction[] {
+        const selectedMonth = this.normalizeBudgetMonth(month);
+        const selectedYear = this.normalizeBudgetYear(year);
+
+        return (transactions || []).filter((transaction) => {
+            const transactionDate = transaction.date ? new Date(transaction.date) : null;
+            if (!transactionDate || Number.isNaN(transactionDate.getTime())) {
+                return false;
+            }
+
+            return transactionDate.getFullYear() === selectedYear && (transactionDate.getMonth() + 1) === selectedMonth;
+        });
     }
 
     // ─── Dynamic Top Categories ───────────────────────────────────────────────
@@ -315,52 +411,82 @@ export class DashboardComponent implements OnInit, OnDestroy {
     getBudgetProgress(transactions: Transaction[], budgets: Budget[]): any[] {
         if (!budgets) return [];
         return budgets.map(b => {
-            const spent = this.getCategorySpending(transactions || [], b.category);
+            const budgetMonth = this.normalizeBudgetMonth(b.month);
+            const budgetYear = this.normalizeBudgetYear(b.year);
+            const monthName = this.getMonthName(budgetMonth);
+            const spent = this.getCategorySpendingForMonthYear(transactions || [], b.category, budgetMonth, budgetYear);
             const percent = b.limitAmount > 0 ? (spent / b.limitAmount) * 100 : 0;
+            const budgetNotificationKey = `${b.category}_${budgetMonth}_${budgetYear}`;
+            const warningNotificationKey = `${budgetNotificationKey}_warning`;
+            const currentMonth = new Date().getMonth() + 1;
+            const currentYear = new Date().getFullYear();
+            const shouldNotifyForThisBudget = budgetMonth === currentMonth && budgetYear === currentYear;
 
             // Initialize budget edit values for each budget
-            if (this.budgetEditValues[b.category] == null) {
-                this.budgetEditValues[b.category] = b.limitAmount;
+            const budgetEditKey = this.getBudgetEditKey(b.category, budgetMonth, budgetYear);
+            if (this.budgetEditValues[budgetEditKey] == null) {
+                this.budgetEditValues[budgetEditKey] = b.limitAmount;
             }
 
             // Check if budget is exceeded (100%) and send notification
-            if (percent > 100 && !this.notifiedBudgets.has(b.category)) {
-                if (!this.notificationService.hasNotificationToday(b.category, 'budget-alert')) {
-                    this.notificationService.addBudgetExceededNotification(b.category, spent, b.limitAmount);
-                    this.showToast(`Alert: ${b.category} budget exceeded! You've spent ₹${spent.toFixed(2)} of ₹${b.limitAmount.toFixed(2)}`, 'warning');
+            if (shouldNotifyForThisBudget && percent > 100 && !this.notifiedBudgets.has(budgetNotificationKey)) {
+                if (!this.notificationService.hasNotificationToday(budgetNotificationKey, 'budget-alert')) {
+                    this.notificationService.addBudgetExceededNotification(b.category, spent, b.limitAmount, `${monthName} ${budgetYear}`, budgetNotificationKey);
+                    this.showToast(`Alert: ${b.category} budget reached in ${monthName} ${budgetYear}. You've spent ₹${spent.toFixed(2)} of ₹${b.limitAmount.toFixed(2)}`, 'warning');
                 }
-                this.notifiedBudgets.add(b.category);
+                this.notifiedBudgets.add(budgetNotificationKey);
             } 
             // Check if within budget range (90-100%) and send warning
-            else if (percent >= 90 && percent <= 100 && !this.notifiedBudgets.has(`${b.category}_warning`) && !this.showModal && !this.showAddBankModal) {
-                if (!this.notificationService.hasNotificationToday(b.category, 'warning')) {
+            else if (shouldNotifyForThisBudget && percent >= 90 && percent <= 100 && !this.notifiedBudgets.has(warningNotificationKey) && !this.showModal && !this.showAddBankModal) {
+                if (!this.notificationService.hasNotificationToday(warningNotificationKey, 'warning')) {
                     this.notificationService.addNotification({
-                        title: `Budget Warning: ${b.category}`,
-                        message: `You've used ${Math.round(percent)}% of your ${b.category} budget (₹${spent.toFixed(2)} / ₹${b.limitAmount.toFixed(2)})`,
+                        title: `Budget Warning: ${b.category} (${monthName} ${budgetYear})`,
+                        message: `You've used ${Math.round(percent)}% of your ${b.category} budget for ${monthName} ${budgetYear} (₹${spent.toFixed(2)} / ₹${b.limitAmount.toFixed(2)})`,
                         type: 'warning',
                         icon: 'ph-warning',
                         read: false,
-                        category: b.category,
+                        category: warningNotificationKey,
                         amount: spent,
                         limit: b.limitAmount
                     });
-                    this.showToast(`Warning: You've used ${Math.round(percent)}% of your ${b.category} budget!`, 'warning');
+                    this.showToast(`Warning: You've used ${Math.round(percent)}% of your ${b.category} budget for ${monthName} ${budgetYear}!`, 'warning');
                 }
-                this.notifiedBudgets.add(`${b.category}_warning`);
+                this.notifiedBudgets.add(warningNotificationKey);
             }
             // Reset notification flags when budget goes back under limit
             else if (percent < 90) {
-                this.notifiedBudgets.delete(b.category);
-                this.notifiedBudgets.delete(`${b.category}_warning`);
+                this.notifiedBudgets.delete(budgetNotificationKey);
+                this.notifiedBudgets.delete(warningNotificationKey);
             }
 
             return {
                 ...b,
+                month: budgetMonth,
+                year: budgetYear,
+                monthName,
                 spent,
                 percent,
                 status: percent > 90 ? 'danger' : percent > 75 ? 'warning' : 'success'
             };
         });
+    }
+
+    private getCategorySpendingForMonthYear(transactions: Transaction[], category: string, month: number, year: number): number {
+        const selectedYear = this.normalizeBudgetYear(year);
+        return (transactions || [])
+            .filter(t => {
+                if (t.category !== category || (t.type !== 'Expense' && !!t.type)) {
+                    return false;
+                }
+
+                const date = t.date ? new Date(t.date) : null;
+                if (!date || Number.isNaN(date.getTime())) {
+                    return false;
+                }
+
+                return date.getFullYear() === selectedYear && (date.getMonth() + 1) === month;
+            })
+            .reduce((sum, t) => sum + Number(t.amount || 0), 0);
     }
 
     private checkSipReminders(sips: Sip[]): void {
@@ -450,6 +576,60 @@ export class DashboardComponent implements OnInit, OnDestroy {
         });
     }
 
+    private checkSubscriptionReminders(subscriptions: Subscription[]): void {
+        if (!Array.isArray(subscriptions) || subscriptions.length === 0) {
+            return;
+        }
+
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        for (const subscription of subscriptions) {
+            const subscriptionId = Number(subscription.id);
+            const billingDay = Number(String(subscription.date || '').trim());
+            const amount = Number(subscription.amount);
+            const subscriptionName = String(subscription.name || 'Subscription').trim();
+
+            if (!Number.isInteger(subscriptionId) || subscriptionId <= 0) {
+                continue;
+            }
+
+            if (!Number.isInteger(billingDay) || billingDay < 1 || billingDay > 31) {
+                continue;
+            }
+
+            const nextDueDate = this.getNextSipDueDate(billingDay, todayStart);
+            const reminderDate = new Date(nextDueDate);
+            reminderDate.setDate(reminderDate.getDate() - 1);
+            reminderDate.setHours(0, 0, 0, 0);
+
+            if (reminderDate.getTime() !== todayStart.getTime()) {
+                continue;
+            }
+
+            const categoryKey = `subscription-reminder-${subscriptionId}`;
+            if (this.notificationService.hasNotificationToday(categoryKey, 'info')) {
+                continue;
+            }
+
+            const dueDateLabel = nextDueDate.toLocaleDateString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+            });
+
+            this.notificationService.addNotification({
+                title: `Subscription Due Tomorrow: ${subscriptionName}`,
+                message: `₹${amount.toFixed(2)} for ${subscriptionName} is scheduled on ${dueDateLabel} (Day ${billingDay}).`,
+                type: 'info',
+                icon: 'ph-calendar-check',
+                read: false,
+                category: categoryKey,
+                amount
+            });
+        }
+    }
+
     private getSipsDueTomorrow(sips: Sip[]): Sip[] {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
@@ -489,19 +669,26 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
 
     saveBudgetEdit(category: string) {
-        const limit = this.budgetEditValues[category];
+        if (!this.editingBudget || this.editingBudget.category !== category) return;
+        const budgetEditKey = this.getBudgetEditKey(category, this.editingBudget.month, this.editingBudget.year);
+        const limit = this.budgetEditValues[budgetEditKey];
         if (!category || limit == null || limit <= 0) return;
-        this.expenseService.saveBudget(category, limit);
+        this.expenseService.saveBudget(category, limit, this.editingBudget.month, this.editingBudget.year);
     }
 
     cancelBudgetEdit(category: string, currentLimit: number) {
         if (!category) return;
-        this.budgetEditValues[category] = currentLimit;
+        if (!this.editingBudget || this.editingBudget.category !== category) return;
+        const budgetEditKey = this.getBudgetEditKey(category, this.editingBudget.month, this.editingBudget.year);
+        this.budgetEditValues[budgetEditKey] = currentLimit;
     }
 
     openBudgetEditModal(budget: any) {
-        this.editingBudget = { category: budget.category, limitAmount: budget.limitAmount };
-        this.budgetEditValues[budget.category] = budget.limitAmount;
+        const month = this.normalizeBudgetMonth(budget.month);
+        const year = this.normalizeBudgetYear(budget.year);
+        this.editingBudget = { category: budget.category, limitAmount: budget.limitAmount, month, year };
+        const budgetEditKey = this.getBudgetEditKey(budget.category, month, year);
+        this.budgetEditValues[budgetEditKey] = budget.limitAmount;
         this.showBudgetEditModal = true;
         this.cdr.markForCheck();
     }
@@ -514,27 +701,32 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     saveBudgetFromModal() {
         if (!this.editingBudget) return;
-        const limit = this.budgetEditValues[this.editingBudget.category];
+        const budgetEditKey = this.getBudgetEditKey(this.editingBudget.category, this.editingBudget.month, this.editingBudget.year);
+        const limit = this.budgetEditValues[budgetEditKey];
         if (limit == null || limit <= 0) return;
-        this.expenseService.saveBudget(this.editingBudget.category, limit);
+        this.expenseService.saveBudget(this.editingBudget.category, limit, this.editingBudget.month, this.editingBudget.year);
         this.closeBudgetEditModal();
     }
 
-    openDeleteConfirmModal(category: string) {
-        this.deletingBudgetCategory = category;
+    openDeleteConfirmModal(category: string, month: number, year: number) {
+        this.deletingBudget = {
+            category,
+            month: this.normalizeBudgetMonth(month),
+            year: this.normalizeBudgetYear(year)
+        };
         this.showDeleteConfirmModal = true;
         this.cdr.markForCheck();
     }
 
     closeDeleteConfirmModal() {
         this.showDeleteConfirmModal = false;
-        this.deletingBudgetCategory = null;
+        this.deletingBudget = null;
         this.cdr.markForCheck();
     }
 
     confirmDeleteBudget() {
-        if (this.deletingBudgetCategory) {
-            this.expenseService.deleteBudget(this.deletingBudgetCategory);
+        if (this.deletingBudget) {
+            this.expenseService.deleteBudget(this.deletingBudget.category, this.deletingBudget.month, this.deletingBudget.year);
             this.closeDeleteConfirmModal();
         }
     }
@@ -549,10 +741,17 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.isMobileMenuOpen = !this.isMobileMenuOpen;
     }
 
-    onSaveBudget(category: string, limit: number) {
+    onSaveBudget(category: string, limit: number, month: number, year: number) {
         if (!category || !limit) return;
-        this.expenseService.saveBudget(category, limit);
+        this.expenseService.saveBudget(category, limit, this.normalizeBudgetMonth(month), this.normalizeBudgetYear(year));
         this.showModal = false;
+    }
+
+    openSetBudgetModal() {
+        this.selectedBudgetSetMonth = this.normalizeBudgetMonth(this.selectedBudgetMonth);
+        this.selectedBudgetSetYear = this.normalizeBudgetYear(this.selectedBudgetYear);
+        this.showModal = true;
+        this.cdr.markForCheck();
     }
 
     onAddBank(name: string, balance?: number) {
@@ -667,6 +866,35 @@ export class DashboardComponent implements OnInit, OnDestroy {
             .slice(0, 4);
     }
 
+    getSubscriptionDeductionLabel(dateValue: string | null | undefined): string {
+        const billingDay = Number(String(dateValue || '').trim());
+        if (!Number.isInteger(billingDay) || billingDay < 1 || billingDay > 31) {
+            return 'Monthly Subscription';
+        }
+
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        const createClampedDate = (year: number, month: number, dayOfMonth: number): Date => {
+            const lastDay = new Date(year, month + 1, 0).getDate();
+            const clampedDay = Math.min(dayOfMonth, lastDay);
+            return new Date(year, month, clampedDay);
+        };
+
+        let nextDeductionDate = createClampedDate(now.getFullYear(), now.getMonth(), billingDay);
+        if (nextDeductionDate.getTime() < todayStart.getTime()) {
+            const nextMonthBase = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+            nextDeductionDate = createClampedDate(nextMonthBase.getFullYear(), nextMonthBase.getMonth(), billingDay);
+        }
+
+        const label = nextDeductionDate.toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        });
+        return `Deducts on ${label}`;
+    }
+
     getFilteredDueTomorrowSips(): Sip[] {
         const source = Array.isArray(this.dueTomorrowSips) ? this.dueTomorrowSips : [];
         const term = this.dashboardSearchTerm;
@@ -706,10 +934,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
         }
     }
 
-    deleteBudget(category: string) {
+    deleteBudget(category: string, month: number, year: number) {
         if (!category) return;
-        if (confirm(`Delete budget for ${category}?`)) {
-            this.expenseService.deleteBudget(category);
+        const monthName = this.getMonthName(month);
+        if (confirm(`Delete budget for ${category} in ${monthName} ${year}?`)) {
+            this.expenseService.deleteBudget(category, this.normalizeBudgetMonth(month), this.normalizeBudgetYear(year));
         }
     }
 

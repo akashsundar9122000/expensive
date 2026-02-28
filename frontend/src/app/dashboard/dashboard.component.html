@@ -145,9 +145,23 @@
                             <i class="ph ph-chart-line-up"></i>
                         </div>
                         <div class="budget-header-actions">
-                            <button class="set-budget-pill" (click)="toggleModal()">
+                            <button class="set-budget-pill" (click)="openSetBudgetModal()">
                                 <i class="ph ph-plus"></i> Set Budget
                             </button>
+                            <div class="budget-filter-row">
+                                <select
+                                    class="budget-month-filter"
+                                    [ngModel]="selectedBudgetMonth"
+                                    (ngModelChange)="onBudgetMonthFilterChange($event)">
+                                    <option *ngFor="let month of monthOptions" [ngValue]="month.value">{{ month.label | slice:0:3 }}</option>
+                                </select>
+                                <select
+                                    class="budget-month-filter"
+                                    [ngModel]="selectedBudgetYear"
+                                    (ngModelChange)="onBudgetYearFilterChange($event)">
+                                    <option *ngFor="let year of yearOptions" [ngValue]="year">{{ year }}</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                     <div class="stat-body">
@@ -157,13 +171,14 @@
                                 <div class="budget-card-header">
                                     <div class="budget-card-title">
                                         <h4>{{ b.category }}</h4>
+                                        <p class="budget-month-chip">{{ b.monthName | slice:0:3 }} {{ b.year }}</p>
                                         <p>₹{{ b.spent | number:'1.0-0' }} / ₹{{ b.limitAmount | number:'1.0-0' }}</p>
                                     </div>
                                     <div class="budget-card-actions">
                                         <button class="action-btn edit-btn" (click)="openBudgetEditModal(b)" title="Edit">
                                             <i class="ph ph-pencil"></i>
                                         </button>
-                                        <button class="action-btn delete-btn" (click)="openDeleteConfirmModal(b.category)" title="Delete">
+                                        <button class="action-btn delete-btn" (click)="openDeleteConfirmModal(b.category, b.month, b.year)" title="Delete">
                                             <i class="ph ph-trash"></i>
                                         </button>
                                     </div>
@@ -317,9 +332,9 @@
                                 </div>
                                 <div class="sub-details">
                                     <h4>{{ s.name }}</h4>
-                                    <p>Monthly Subscription</p>
+                                    <p>{{ getSubscriptionDeductionLabel(s.date) }}</p>
                                 </div>
-                                <div class="sub-amount">-₹{{ s.amount | number:'1.0-0' }}</div>
+                                <div class="sub-amount">₹{{ s.amount | number:'1.0-0' }}</div>
                             </div>
                             <div *ngIf="dashboardSearchTerm && getFilteredSubscriptions(data.subscriptions || []).length === 0" class="no-data-msg" style="padding: 10px 0;">
                                 No matching upcoming bills found.
@@ -361,8 +376,8 @@
                 <button class="close-btn" (click)="showModal = false"><i class="ph ph-x"></i></button>
             </div>
             <div class="modal-body">
-                <form class="modal-form"
-                    (submit)="onSaveBudget(budgetCat.value, +budgetLimit.value); $event.preventDefault()">
+                <form class="modal-form budget-modal-form"
+                    (submit)="onSaveBudget(budgetCat.value, +budgetLimit.value, selectedBudgetSetMonth, selectedBudgetSetYear); $event.preventDefault()">
                     <div class="form-group">
                         <label>Category</label>
                         <select #budgetCat>
@@ -375,6 +390,20 @@
                             <option value="Other">Other</option>
                         </select>
                     </div>
+                    <div class="budget-period-row">
+                        <div class="form-group">
+                            <label>Month</label>
+                            <select [(ngModel)]="selectedBudgetSetMonth" name="budgetSetMonth">
+                                <option *ngFor="let month of monthOptions" [value]="month.value">{{ month.label }}</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Year</label>
+                            <select [(ngModel)]="selectedBudgetSetYear" name="budgetSetYear">
+                                <option *ngFor="let year of yearOptions" [value]="year">{{ year }}</option>
+                            </select>
+                        </div>
+                    </div>
                     <div class="form-group">
                         <label>Monthly Limit (₹)</label>
                         <input type="number" #budgetLimit placeholder="e.g. 5000">
@@ -382,7 +411,7 @@
                     <div class="modal-actions">
                         <button type="button" class="outline-btn" (click)="showModal = false">Cancel</button>
                         <button type="button" class="primary-btn"
-                            (click)="onSaveBudget(budgetCat.value, +budgetLimit.value)"> Save Budget </button>
+                            (click)="onSaveBudget(budgetCat.value, +budgetLimit.value, selectedBudgetSetMonth, selectedBudgetSetYear)"> Save Budget </button>
                     </div>
                 </form>
             </div>
@@ -429,13 +458,13 @@
     <div class="modal-overlay" *ngIf="showBudgetEditModal" (click)="closeBudgetEditModal()">
         <div class="modal-card" (click)="$event.stopPropagation()">
             <div class="modal-header">
-                <h3>Edit Budget: {{ editingBudget?.category }}</h3>
+                <h3>Edit Budget: {{ editingBudget?.category }} ({{ getMonthName(editingBudget?.month) }} {{ editingBudget?.year }})</h3>
                 <button class="close-btn" (click)="closeBudgetEditModal()"><i class="ph ph-x"></i></button>
             </div>
             <form (ngSubmit)="saveBudgetFromModal()">
                 <div class="form-group">
                     <label>Budget Limit (₹)</label>
-                    <input type="number" min="1" step="1" [(ngModel)]="budgetEditValues[editingBudget?.category || '']" name="limitAmount" placeholder="Enter monthly limit" required>
+                    <input type="number" min="1" step="1" [(ngModel)]="budgetEditValues[(editingBudget?.category || '') + '_' + (editingBudget?.month || selectedBudgetMonth) + '_' + (editingBudget?.year || selectedBudgetYear)]" name="limitAmount" placeholder="Enter monthly limit" required>
                 </div>
                 <div class="form-actions">
                     <button type="button" class="outline-btn" (click)="closeBudgetEditModal()">Cancel</button>
@@ -455,7 +484,7 @@
                 <h3>Delete Budget?</h3>
             </div>
             <p class="confirm-modal-message">
-                Are you sure you want to delete the budget for <strong>{{ deletingBudgetCategory }}</strong>? This action cannot be undone.
+                Are you sure you want to delete the budget for <strong>{{ deletingBudget?.category }}</strong> in <strong>{{ getMonthName(deletingBudget?.month) }} {{ deletingBudget?.year }}</strong>? This action cannot be undone.
             </p>
             <div class="confirm-modal-actions">
                 <button class="outline-btn" (click)="closeDeleteConfirmModal()">Cancel</button>
