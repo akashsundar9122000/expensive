@@ -27,6 +27,7 @@ import SubscriptionsScreen from '../screens/SubscriptionsScreen';
 import InvestmentsScreen from '../screens/InvestmentsScreen';
 import BudgetsScreen from '../screens/BudgetsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import SipsScreen from '../screens/SipsScreen';
 import { Colors } from '../theme/colors';
 import { authService } from '../services/authService';
 
@@ -176,6 +177,7 @@ export default function AppNavigator() {
                 />
                 <Stack.Screen name="Subscriptions" component={SubscriptionsScreen} />
                 <Stack.Screen name="Investments" component={InvestmentsScreen} />
+                <Stack.Screen name="Sips" component={SipsScreen} />
             </Stack.Navigator>
         </NavigationContainer>
     );

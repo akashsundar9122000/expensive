@@ -1,4 +1,4 @@
-export const Colors = {
+const darkPalette = {
     // Primary backgrounds
     background: '#0A0E27',
     surface: '#111638',
@@ -58,6 +58,71 @@ export const Colors = {
         'Transport': '#06B6D4',
     } as Record<string, string>,
 };
+
+const lightPalette = {
+    background: '#F5F7FC',
+    surface: '#FFFFFF',
+    surfaceLight: '#EEF2FF',
+    card: '#FFFFFF',
+    cardElevated: '#F8FAFF',
+
+    primary: '#3B5BDB',
+    primaryLight: '#5B7CFA',
+    primaryDark: '#2D45A5',
+    secondary: '#7C3AED',
+    secondaryLight: '#A855F7',
+
+    success: '#16A34A',
+    successLight: '#22C55E',
+    warning: '#D97706',
+    warningLight: '#F59E0B',
+    danger: '#DC2626',
+    dangerLight: '#EF4444',
+
+    textPrimary: '#0F172A',
+    textSecondary: '#475569',
+    textMuted: '#64748B',
+    textAccent: '#3B5BDB',
+
+    border: '#E2E8F0',
+    borderLight: '#CBD5E1',
+
+    gradientPrimary: ['#3B5BDB', '#7C3AED'],
+    gradientSuccess: ['#22C55E', '#16A34A'],
+    gradientDanger: ['#EF4444', '#DC2626'],
+    gradientWarning: ['#F59E0B', '#D97706'],
+    gradientPurple: ['#7C3AED', '#5B21B6'],
+    gradientCard: ['rgba(255, 255, 255, 0.9)', 'rgba(245, 247, 252, 0.75)'],
+
+    overlay: 'rgba(15, 23, 42, 0.45)',
+    glass: 'rgba(255, 255, 255, 0.8)',
+
+    tabBarBg: '#FFFFFF',
+    tabBarActive: '#3B5BDB',
+    tabBarInactive: '#64748B',
+
+    categoryColors: {
+        'Food & Grocery': '#16A34A',
+        'Shopping': '#3B5BDB',
+        'Entertainment': '#D97706',
+        'Investment': '#7C3AED',
+        'Bills': '#DC2626',
+        'Transport': '#0891B2',
+    } as Record<string, string>,
+};
+
+export type ThemeMode = 'dark' | 'light';
+
+const palettes = {
+    dark: darkPalette,
+    light: lightPalette,
+};
+
+export const Colors = { ...lightPalette };
+
+export function applyTheme(mode: ThemeMode) {
+    Object.assign(Colors, palettes[mode]);
+}
 
 export const Shadows = {
     small: {

@@ -105,7 +105,26 @@ export default function BudgetsScreen() {
             };
         });
 
-        setBudgets(enriched);
+        const latestByCategory = new Map<string, BudgetWithSpend>();
+        enriched.forEach((budget) => {
+            const existing = latestByCategory.get(budget.category);
+            if (!existing) {
+                latestByCategory.set(budget.category, budget);
+                return;
+            }
+
+            const existingYear = Number(existing.year || 0);
+            const existingMonth = Number(existing.month || 0);
+            const nextYear = Number(budget.year || 0);
+            const nextMonth = Number(budget.month || 0);
+
+            const isNewer = nextYear > existingYear || (nextYear === existingYear && nextMonth > existingMonth);
+            if (isNewer) {
+                latestByCategory.set(budget.category, budget);
+            }
+        });
+
+        setBudgets(Array.from(latestByCategory.values()));
     }, []);
 
     useEffect(() => {
@@ -253,7 +272,7 @@ export default function BudgetsScreen() {
             <FlatList
                 data={budgets}
                 renderItem={renderItem}
-                keyExtractor={(item) => item.category}
+                keyExtractor={(item, index) => `${item.category}-${item.month ?? 'na'}-${item.year ?? 'na'}-${index}`}
                 contentContainerStyle={styles.list}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} />}
                 showsVerticalScrollIndicator={false}

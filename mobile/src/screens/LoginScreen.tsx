@@ -28,7 +28,15 @@ export default function LoginScreen({ navigation }: any) {
                 Alert.alert('Error', 'Invalid credentials');
             }
         } catch (error: any) {
-            Alert.alert('Login Failed', error?.response?.data?.error || 'Invalid email or password');
+            const timedOut = error?.code === 'ECONNABORTED';
+            const networkError = String(error?.message || '').toLowerCase().includes('network');
+            Alert.alert(
+                'Login Failed',
+                error?.response?.data?.error ||
+                (timedOut || networkError
+                    ? 'Unable to reach server. Please check internet and try again.'
+                    : 'Invalid email or password')
+            );
         } finally {
             setLoading(false);
         }

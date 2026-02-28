@@ -7,6 +7,12 @@ export interface User {
     bankAccounts: string[];
 }
 
+export interface Bank {
+    id: number;
+    name: string;
+    balance: number;
+}
+
 export interface Transaction {
     id: number;
     amount: number;
@@ -14,6 +20,7 @@ export interface Transaction {
     subCategory: string;
     date: string;
     mode: 'Bank' | 'UPI' | 'Card';
+    bankName?: string;
 }
 
 export interface Subscription {
@@ -23,6 +30,7 @@ export interface Subscription {
     amount: number;
     icon: string;
     color: string;
+    bankName?: string;
 }
 
 export interface Investment {
@@ -33,9 +41,20 @@ export interface Investment {
     returnPct?: number;
 }
 
+export interface Sip {
+    id: number;
+    type: string;
+    investmentName: string;
+    monthlyAmount: number;
+    sipDay: number;
+    bankName?: string;
+}
+
 export interface Budget {
     category: string;
     limitAmount: number;
+    month?: number;
+    year?: number;
     // spent is computed client-side from transactions for the current month
     spent?: number;
 }

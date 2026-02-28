@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
     Alert, StatusBar, ActivityIndicator,
@@ -20,33 +20,61 @@ export default function AddExpenseScreen({ navigation }: any) {
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [bankAccounts, setBankAccounts] = useState<string[]>([]);
     const [selectedBank, setSelectedBank] = useState('');
+    const [newBankName, setNewBankName] = useState('');
+    const [addingBank, setAddingBank] = useState(false);
     const [loading, setLoading] = useState(false);
 
-    useEffect(() => {
-        loadBanks();
-    }, []);
-
-    const loadBanks = async () => {
+    const loadBanks = useCallback(async () => {
         try {
             // Fetch live bank list from API first; it is the source of truth
             const banks = await expenseService.getBanks();
             if (banks?.length) {
-                const bankNames = banks.map((b: any) => b.name ?? String(b.id));
+                const bankNames = banks
+                    .map((b: any) => String(b.name ?? b.id ?? '').trim())
+                    .filter(Boolean);
                 setBankAccounts(bankNames);
-                // Always set a default selection when list is freshly loaded
-                setSelectedBank(bankNames[0]);
+                // Preserve current selection if still available; fallback to first
+                setSelectedBank((prev) => (prev && bankNames.includes(prev) ? prev : bankNames[0]));
             } else {
                 // Fall back to the cached user profile (may be stale but better than nothing)
                 const user = await authService.getCurrentUser();
                 if (user?.bankAccounts?.length) {
                     setBankAccounts(user.bankAccounts);
-                    setSelectedBank(user.bankAccounts[0]);
+                    setSelectedBank((prev) =>
+                        prev && user.bankAccounts.includes(prev) ? prev : user.bankAccounts[0]
+                    );
                 }
             }
         } catch {
             // Non-critical: bank list unavailable, user can proceed without account selection
         }
+    }, []);
+
+    const handleAddBank = async () => {
+        const trimmed = newBankName.trim();
+        if (!trimmed) {
+            Alert.alert('Error', 'Please enter bank name');
+            return;
+        }
+
+        setAddingBank(true);
+        try {
+            await expenseService.addBank(trimmed);
+            setNewBankName('');
+            await loadBanks();
+            Alert.alert('Success', 'Bank account added');
+        } catch {
+            Alert.alert('Error', 'Failed to add bank account');
+        } finally {
+            setAddingBank(false);
+        }
     };
+
+    useEffect(() => {
+        loadBanks();
+        const unsubscribe = navigation.addListener('focus', loadBanks);
+        return unsubscribe;
+    }, [loadBanks, navigation]);
 
     const handleSubmit = async () => {
         if (!amount || isNaN(parseFloat(amount))) {
@@ -63,7 +91,7 @@ export default function AddExpenseScreen({ navigation }: any) {
                     date,
                     mode: mode as any,
                 },
-                selectedBank
+                selectedBank || bankAccounts[0] || 'Default'
             );
             Alert.alert('Success', 'Expense added successfully!', [
                 { text: 'OK', onPress: () => navigation.goBack() }
@@ -167,9 +195,9 @@ export default function AddExpenseScreen({ navigation }: any) {
                 </View>
 
                 {/* Bank Account */}
-                {bankAccounts.length > 0 && (
-                    <View style={styles.section}>
-                        <Text style={styles.label}>Select Account</Text>
+                <View style={styles.section}>
+                    <Text style={styles.label}>Select Account</Text>
+                    {bankAccounts.length > 0 ? (
                         <View style={styles.chipGrid}>
                             {bankAccounts.map((bank) => (
                                 <TouchableOpacity
@@ -188,8 +216,35 @@ export default function AddExpenseScreen({ navigation }: any) {
                                 </TouchableOpacity>
                             ))}
                         </View>
+                    ) : (
+                        <Text style={styles.hintText}>No bank account found. Add one below to continue switching.</Text>
+                    )}
+
+                    <View style={styles.addBankRow}>
+                        <View style={styles.addBankInput}>
+                            <TextInput
+                                style={styles.addBankField}
+                                placeholder="Add bank/account name"
+                                placeholderTextColor={Colors.textMuted}
+                                value={newBankName}
+                                onChangeText={setNewBankName}
+                                returnKeyType="done"
+                                onSubmitEditing={handleAddBank}
+                            />
+                        </View>
+                        <TouchableOpacity
+                            style={styles.addBankBtn}
+                            onPress={handleAddBank}
+                            disabled={addingBank}
+                        >
+                            {addingBank ? (
+                                <ActivityIndicator color="#FFF" size="small" />
+                            ) : (
+                                <Ionicons name="add" size={20} color="#FFF" />
+                            )}
+                        </TouchableOpacity>
                     </View>
-                )}
+                </View>
 
                 {/* Payment Mode */}
                 <View style={styles.section}>
@@ -289,6 +344,27 @@ const styles = StyleSheet.create({
     },
     chipText: { fontSize: 13, color: Colors.textSecondary, fontWeight: '500' },
     chipTextActive: { color: '#FFF' },
+    hintText: { fontSize: 12, color: Colors.textSecondary, marginBottom: 8 },
+    addBankRow: { flexDirection: 'row', marginTop: 12, gap: 10 },
+    addBankInput: {
+        flex: 1,
+        backgroundColor: Colors.surface,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: Colors.border,
+        paddingHorizontal: 12,
+        height: 44,
+        justifyContent: 'center',
+    },
+    addBankField: { color: Colors.textPrimary, fontSize: 14 },
+    addBankBtn: {
+        width: 44,
+        height: 44,
+        borderRadius: 12,
+        backgroundColor: Colors.primary,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
 
     modeGrid: { flexDirection: 'row', gap: 10 },
     modeCard: {

@@ -19,11 +19,23 @@ export default function SubscriptionsScreen() {
     const [loading, setLoading] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
+    const [bankAccounts, setBankAccounts] = useState<string[]>([]);
+    const [selectedBank, setSelectedBank] = useState('');
 
     const loadData = useCallback(async () => {
         try {
-            const data = await expenseService.getSubscriptions();
-            setSubscriptions(Array.isArray(data) ? data : []);
+            const [subData, banks] = await Promise.all([
+                expenseService.getSubscriptions(),
+                expenseService.getBanks(),
+            ]);
+
+            setSubscriptions(Array.isArray(subData) ? subData : []);
+
+            const bankNames = Array.isArray(banks)
+                ? banks.map((bank) => String(bank.name || '').trim()).filter(Boolean)
+                : [];
+            setBankAccounts(bankNames);
+            setSelectedBank((prev) => (prev && bankNames.includes(prev) ? prev : bankNames[0] || ''));
         } catch {
             // Network error — stale data remains displayed
         }
@@ -41,6 +53,7 @@ export default function SubscriptionsScreen() {
         setName('');
         setAmount('');
         setDate('');
+        setSelectedBank(bankAccounts[0] || '');
         setIsEditMode(false);
         setEditingId(null);
     };
@@ -53,6 +66,11 @@ export default function SubscriptionsScreen() {
     const handleAdd = async () => {
         if (!name || !amount || !date) {
             Alert.alert('Error', 'Please fill in all fields');
+            return;
+        }
+
+        if (!selectedBank) {
+            Alert.alert('Error', 'Please select a bank account');
             return;
         }
         
@@ -69,7 +87,8 @@ export default function SubscriptionsScreen() {
                 amount: parseFloat(amount),
                 date,
                 icon: 'ph-credit-card',
-                color: '#4A6CF7'
+                color: '#4A6CF7',
+                bankName: selectedBank,
             };
             
             if (isEditMode && editingId) {
@@ -91,6 +110,7 @@ export default function SubscriptionsScreen() {
         setName(sub.name);
         setAmount(sub.amount.toString());
         setDate(sub.date || '');
+        setSelectedBank(sub.bankName || bankAccounts[0] || '');
         setIsEditMode(true);
         setEditingId(sub.id);
         setShowModal(true);
@@ -124,6 +144,7 @@ export default function SubscriptionsScreen() {
             <View style={styles.details}>
                 <Text style={styles.itemName}>{item.name}</Text>
                 <Text style={styles.itemDate}>Deducts on: {item.date || 'Not set'}</Text>
+                <Text style={styles.itemDate}>Bank: {item.bankName || 'N/A'}</Text>
             </View>
             <Text style={styles.itemAmount}>{formatCurrency(item.amount)}</Text>
             <View style={styles.actionButtons}>
@@ -201,7 +222,36 @@ export default function SubscriptionsScreen() {
                             <TextInput style={styles.input} placeholder="Billing date (day of month)" placeholderTextColor={Colors.textMuted} value={date} onChangeText={setDate} keyboardType="number-pad" />
                         </View>
 
-                        <TouchableOpacity style={styles.submitBtn} onPress={handleAdd} disabled={loading} activeOpacity={0.8}>
+                        <Text style={styles.bankLabel}>Bank Account</Text>
+                        {bankAccounts.length > 0 ? (
+                            <View style={styles.bankChipGrid}>
+                                {bankAccounts.map((bank) => (
+                                    <TouchableOpacity
+                                        key={bank}
+                                        style={[styles.bankChip, selectedBank === bank && styles.bankChipActive]}
+                                        onPress={() => setSelectedBank(bank)}
+                                    >
+                                        <Ionicons
+                                            name="business-outline"
+                                            size={14}
+                                            color={selectedBank === bank ? '#FFF' : Colors.textSecondary}
+                                        />
+                                        <Text style={[styles.bankChipText, selectedBank === bank && styles.bankChipTextActive]}>
+                                            {bank}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        ) : (
+                            <Text style={styles.bankHint}>No bank account found. Add one in Settings first.</Text>
+                        )}
+
+                        <TouchableOpacity
+                            style={styles.submitBtn}
+                            onPress={handleAdd}
+                            disabled={loading || bankAccounts.length === 0}
+                            activeOpacity={0.8}
+                        >
                             <LinearGradient colors={Colors.gradientPurple as any} style={styles.submitGradient}>
                                 <Text style={styles.submitText}>{loading ? (isEditMode ? 'Updating...' : 'Adding...') : (isEditMode ? 'Update Subscription' : 'Add Subscription')}</Text>
                             </LinearGradient>
@@ -265,6 +315,18 @@ const styles = StyleSheet.create({
     inputIcon: { marginRight: 12 },
     inputCurrency: { fontSize: 18, fontWeight: '700', color: Colors.primary, marginRight: 8 },
     input: { flex: 1, color: Colors.textPrimary, fontSize: 15 },
+    bankLabel: { fontSize: 13, fontWeight: '600', color: Colors.textSecondary, marginTop: 4, marginBottom: 10 },
+    bankChipGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+    bankChip: {
+        flexDirection: 'row', alignItems: 'center', gap: 6,
+        backgroundColor: Colors.card, borderRadius: 10,
+        borderWidth: 1, borderColor: Colors.border,
+        paddingVertical: 8, paddingHorizontal: 12,
+    },
+    bankChipActive: { backgroundColor: Colors.secondary, borderColor: Colors.secondary },
+    bankChipText: { color: Colors.textSecondary, fontSize: 12, fontWeight: '600' },
+    bankChipTextActive: { color: '#FFF' },
+    bankHint: { color: Colors.warning, fontSize: 12, marginBottom: 8 },
     submitBtn: { marginTop: 8, borderRadius: 14, overflow: 'hidden', ...Shadows.medium },
     submitGradient: { height: 52, justifyContent: 'center', alignItems: 'center', borderRadius: 14 },
     submitText: { color: '#FFF', fontSize: 16, fontWeight: '700' },

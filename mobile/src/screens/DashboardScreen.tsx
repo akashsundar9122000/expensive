@@ -24,7 +24,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors, Shadows } from '../theme/colors';
 import { expenseService } from '../services/expenseService';
 import { authService } from '../services/authService';
-import { DashboardStats, Transaction, Subscription, Budget, User } from '../services/models';
+import { notificationService } from '../services/notificationService';
+import { DashboardStats, Transaction, Subscription, Budget, User, Sip } from '../services/models';
 
 const { width } = Dimensions.get('window');
 
@@ -32,30 +33,50 @@ export default function DashboardScreen({ navigation }: any) {
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+    const [sips, setSips] = useState<Sip[]>([]);
     const [budgets, setBudgets] = useState<Budget[]>([]);
     const [user, setUser] = useState<User | null>(null);
     const [refreshing, setRefreshing] = useState(false);
-    const [showBalance, setShowBalance] = useState(true);
+    const [showBalance, setShowBalance] = useState(false);
 
     const loadData = useCallback(async () => {
         // Use allSettled so a single failing endpoint does not blank the entire dashboard.
-        const [statsResult, txResult, subResult, budgetResult, userResult] =
+        const [statsResult, txResult, subResult, sipResult, budgetResult, userResult] =
             await Promise.allSettled([
                 expenseService.getStats(),
                 expenseService.getTransactions(),
                 expenseService.getSubscriptions(),
+                expenseService.getSips(),
                 expenseService.getBudgets(),
                 authService.getCurrentUser(),
             ]);
 
+        const nextTransactions: Transaction[] = txResult.status === 'fulfilled'
+            ? (Array.isArray(txResult.value) ? txResult.value : [])
+            : [];
+        const nextSubscriptions: Subscription[] = subResult.status === 'fulfilled'
+            ? (Array.isArray(subResult.value) ? subResult.value : [])
+            : [];
+        const nextSips: Sip[] = sipResult.status === 'fulfilled'
+            ? (Array.isArray(sipResult.value) ? sipResult.value : [])
+            : [];
+        const nextBudgets: Budget[] = budgetResult.status === 'fulfilled'
+            ? (Array.isArray(budgetResult.value) ? budgetResult.value : [])
+            : [];
+
         if (statsResult.status === 'fulfilled') setStats(statsResult.value);
-        if (txResult.status === 'fulfilled')
-            setTransactions(Array.isArray(txResult.value) ? txResult.value : []);
-        if (subResult.status === 'fulfilled')
-            setSubscriptions(Array.isArray(subResult.value) ? subResult.value : []);
-        if (budgetResult.status === 'fulfilled')
-            setBudgets(Array.isArray(budgetResult.value) ? budgetResult.value : []);
+        setTransactions(nextTransactions);
+        setSubscriptions(nextSubscriptions);
+        setSips(nextSips);
+        setBudgets(nextBudgets);
         if (userResult.status === 'fulfilled') setUser(userResult.value);
+
+        void notificationService.evaluateBudgetAndDueNotifications({
+            transactions: nextTransactions,
+            subscriptions: nextSubscriptions,
+            sips: nextSips,
+            budgets: nextBudgets,
+        });
     }, []);
 
     useEffect(() => {
@@ -221,6 +242,29 @@ export default function DashboardScreen({ navigation }: any) {
                                 />
                             </View>
                         </View>
+
+                        {/* Bank Balances */}
+                        <View style={styles.goalCard}>
+                            <View style={styles.sectionHeaderInline}>
+                                <Text style={styles.goalTitle}>Bank Accounts</Text>
+                                <Text style={styles.goalSub}>{Object.keys(stats.bankBalances || {}).length} linked</Text>
+                            </View>
+                            {Object.entries(stats.bankBalances || {}).length === 0 ? (
+                                <Text style={styles.goalSub}>No bank accounts found</Text>
+                            ) : (
+                                Object.entries(stats.bankBalances || {}).map(([bankName, bankBalance]) => (
+                                    <View key={bankName} style={styles.bankRow}>
+                                        <View style={styles.bankRowLeft}>
+                                            <Ionicons name="business-outline" size={16} color={Colors.primary} />
+                                            <Text style={styles.bankRowName}>{bankName}</Text>
+                                        </View>
+                                        <Text style={styles.bankRowValue}>
+                                            {showBalance ? formatCurrency(Number(bankBalance || 0)) : '₹ ••••••'}
+                                        </Text>
+                                    </View>
+                                ))
+                            )}
+                        </View>
                     </>
                 )}
 
@@ -326,6 +370,34 @@ export default function DashboardScreen({ navigation }: any) {
                                 <Text style={styles.subDate}>{s.date}</Text>
                             </View>
                             <Text style={styles.subAmount}>{formatCurrency(s.amount)}</Text>
+                        </View>
+                    ))
+                )}
+
+                {/* SIPs */}
+                <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>Active SIPs</Text>
+                    <TouchableOpacity onPress={() => navigation.navigate('Sips')}>
+                        <Text style={styles.seeAll}>See All</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {sips.length === 0 ? (
+                    <View style={styles.emptyState}>
+                        <Ionicons name="repeat-outline" size={48} color={Colors.textMuted} />
+                        <Text style={styles.emptyText}>No active SIPs</Text>
+                    </View>
+                ) : (
+                    sips.slice(0, 3).map((sip, idx) => (
+                        <View key={sip.id ?? idx} style={styles.subItem}>
+                            <View style={[styles.subIconBg, { backgroundColor: Colors.success + '20' }]}> 
+                                <Ionicons name="repeat" size={20} color={Colors.success} />
+                            </View>
+                            <View style={styles.subDetails}>
+                                <Text style={styles.subName}>{sip.investmentName}</Text>
+                                <Text style={styles.subDate}>Day {sip.sipDay} • {sip.type}</Text>
+                            </View>
+                            <Text style={styles.subAmount}>{formatCurrency(sip.monthlyAmount)}</Text>
                         </View>
                     ))
                 )}
@@ -462,6 +534,23 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         fontSize: 14,
     },
+    sectionHeaderInline: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    bankRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 8,
+        borderTopWidth: 1,
+        borderTopColor: Colors.border,
+    },
+    bankRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    bankRowName: { color: Colors.textPrimary, fontSize: 14, fontWeight: '600' },
+    bankRowValue: { color: Colors.textPrimary, fontSize: 14, fontWeight: '700' },
 
     // Progress bar (shared)
     progressBar: {

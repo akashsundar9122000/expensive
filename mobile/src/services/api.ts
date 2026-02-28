@@ -16,23 +16,24 @@ import * as SecureStore from 'expo-secure-store';
 
 // ---------------------------------------------------------------------------
 // Configuration
-// Update PRODUCTION_BASE_URL to your deployed Vercel project URL.
-// Never use HTTP in production; this must be an HTTPS endpoint.
+// Production default points to the active Render backend.
+// For local/LAN testing, set EXPO_PUBLIC_API_URL (must be https:// or http://).
 // ---------------------------------------------------------------------------
-export const PRODUCTION_BASE_URL = 'https://expense-tracker-five-zeta-64.vercel.app';
+export const PRODUCTION_BASE_URL = 'https://expensive-backend-docker.onrender.com';
 
-// During local development against a dev server running on your LAN, you may
-// temporarily override this in a .env file or environment config. The app
-// always falls back to the production URL.
-const BASE_URL = PRODUCTION_BASE_URL;
+const envBaseUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+const BASE_URL = (envBaseUrl && /^https?:\/\//i.test(envBaseUrl)
+    ? envBaseUrl
+    : PRODUCTION_BASE_URL).replace(/\/$/, '');
 
 // Keychain key name for the JWT token (stable across app updates)
 export const KEYCHAIN_TOKEN_KEY = 'expensify_jwt_token';
 
 const api = axios.create({
     baseURL: BASE_URL,
-    timeout: 20000,
+    timeout: 45000,
     headers: {
+        'Accept': 'application/json',
         'Content-Type': 'application/json',
     },
 });
@@ -57,6 +58,18 @@ api.interceptors.request.use(
 api.interceptors.response.use(
     (response) => response,
     async (error: AxiosError) => {
+        const originalConfig = error.config as (InternalAxiosRequestConfig & { _retry?: boolean }) | undefined;
+        const isNetworkOrTimeout = !error.response && (
+            error.code === 'ECONNABORTED' ||
+            error.message?.toLowerCase().includes('network')
+        );
+
+        // Render/free tiers can cold-start slowly; retry once for transient failures.
+        if (isNetworkOrTimeout && originalConfig && !originalConfig._retry) {
+            originalConfig._retry = true;
+            return api.request(originalConfig);
+        }
+
         if (error.response?.status === 401) {
             // Wipe the token from Keychain on authentication failure
             await SecureStore.deleteItemAsync(KEYCHAIN_TOKEN_KEY);

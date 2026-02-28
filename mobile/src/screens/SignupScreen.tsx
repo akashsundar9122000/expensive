@@ -36,7 +36,16 @@ export default function SignupScreen({ navigation }: any) {
                 navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
             }
         } catch (error: any) {
-            Alert.alert('Registration Failed', error?.response?.data?.message || 'Could not create account');
+            const timedOut = error?.code === 'ECONNABORTED';
+            const networkError = String(error?.message || '').toLowerCase().includes('network');
+            Alert.alert(
+                'Registration Failed',
+                error?.response?.data?.error ||
+                error?.response?.data?.message ||
+                (timedOut || networkError
+                    ? 'Unable to reach server. Please check internet and try again.'
+                    : 'Could not create account')
+            );
         } finally {
             setLoading(false);
         }

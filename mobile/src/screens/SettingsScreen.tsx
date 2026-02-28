@@ -8,7 +8,7 @@
  * Logout wipes the Keychain via authService.logout().
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     View,
     Text,
@@ -19,6 +19,8 @@ import {
     StatusBar,
     TextInput,
     ActivityIndicator,
+    Modal,
+    Switch,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,25 +28,34 @@ import { Colors, Shadows } from '../theme/colors';
 import { authService } from '../services/authService';
 import { expenseService } from '../services/expenseService';
 import { User, DashboardStats } from '../services/models';
+import { themeService } from '../services/themeService';
+import { notificationService } from '../services/notificationService';
+import type { ThemeMode } from '../theme/colors';
 
 export default function SettingsScreen({ navigation }: any) {
     const [user, setUser] = useState<User | null>(null);
     const [stats, setStats] = useState<DashboardStats | null>(null);
+    const [banks, setBanks] = useState<Array<{ id: number; name: string; balance: number }>>([]);
     const [newBankName, setNewBankName] = useState('');
     const [goalName, setGoalName] = useState('');
     const [goalRequired, setGoalRequired] = useState('');
     const [goalCollected, setGoalCollected] = useState('');
     const [addingBank, setAddingBank] = useState(false);
     const [savingGoal, setSavingGoal] = useState(false);
+    const [showEditBankModal, setShowEditBankModal] = useState(false);
+    const [editingBankId, setEditingBankId] = useState<number | null>(null);
+    const [editingBankName, setEditingBankName] = useState('');
+    const [editingBankBalance, setEditingBankBalance] = useState('');
+    const [savingBankEdit, setSavingBankEdit] = useState(false);
+    const [showBankBalances, setShowBankBalances] = useState(false);
+    const [themeMode, setThemeMode] = useState<ThemeMode>('light');
+    const [pushEnabled, setPushEnabled] = useState(true);
 
-    useEffect(() => {
-        loadData();
-    }, []);
-
-    const loadData = async () => {
-        const [userResult, statsResult] = await Promise.allSettled([
+    const loadData = useCallback(async () => {
+        const [userResult, statsResult, banksResult] = await Promise.allSettled([
             authService.getCurrentUser(),
             expenseService.getStats(),
+            expenseService.getBanks(),
         ]);
 
         if (userResult.status === 'fulfilled') setUser(userResult.value);
@@ -58,7 +69,31 @@ export default function SettingsScreen({ navigation }: any) {
                 setGoalCollected(statsData.goalCollected?.toString() ?? '');
             }
         }
-    };
+
+        if (banksResult.status === 'fulfilled') {
+            const list = Array.isArray(banksResult.value) ? banksResult.value : [];
+            setBanks(list);
+            await authService.updateUserCache({ bankAccounts: list.map((bank) => bank.name) });
+        }
+    }, []);
+
+    useEffect(() => {
+        loadData();
+        const unsubscribe = navigation.addListener('focus', loadData);
+        return unsubscribe;
+    }, [loadData, navigation]);
+
+    useEffect(() => {
+        const loadThemeAndNotifications = async () => {
+            const [mode, enabled] = await Promise.all([
+                themeService.getTheme(),
+                notificationService.getPushEnabled(),
+            ]);
+            setThemeMode(mode);
+            setPushEnabled(enabled);
+        };
+        loadThemeAndNotifications();
+    }, []);
 
     const handleAddBank = async () => {
         const trimmed = newBankName.trim();
@@ -95,6 +130,66 @@ export default function SettingsScreen({ navigation }: any) {
         }
     };
 
+    const openEditBankModal = (bank: { id: number; name: string; balance: number }) => {
+        setEditingBankId(bank.id);
+        setEditingBankName(bank.name);
+        setEditingBankBalance(String(bank.balance ?? 0));
+        setShowEditBankModal(true);
+    };
+
+    const handleUpdateBank = async () => {
+        if (!editingBankId) return;
+        const trimmed = editingBankName.trim();
+        if (!trimmed) {
+            Alert.alert('Error', 'Bank name is required');
+            return;
+        }
+
+        const parsedBalance = parseFloat(editingBankBalance);
+        if (!Number.isFinite(parsedBalance)) {
+            Alert.alert('Error', 'Please enter a valid balance');
+            return;
+        }
+
+        setSavingBankEdit(true);
+        try {
+            await expenseService.updateBank(editingBankId, trimmed, parsedBalance);
+            setShowEditBankModal(false);
+            setEditingBankId(null);
+            setEditingBankName('');
+            setEditingBankBalance('');
+            await loadData();
+            Alert.alert('Success', 'Bank account updated.');
+        } catch {
+            Alert.alert('Error', 'Failed to update bank account.');
+        } finally {
+            setSavingBankEdit(false);
+        }
+    };
+
+    const handleDeleteBank = (bank: { id: number; name: string }) => {
+        Alert.alert(
+            'Delete Bank',
+            `Remove ${bank.name}? At least one bank account must remain.`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            await expenseService.deleteBank(bank.id);
+                            await loadData();
+                        } catch (err: any) {
+                            const message = String(err?.response?.data?.error || 'Failed to delete bank account.');
+                            Alert.alert('Error', message);
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
     const handleLogout = () => {
         Alert.alert(
             'Sign Out',
@@ -112,6 +207,29 @@ export default function SettingsScreen({ navigation }: any) {
                 },
             ]
         );
+    };
+
+    const handleThemeToggle = async (isDark: boolean) => {
+        const nextMode: ThemeMode = isDark ? 'dark' : 'light';
+        setThemeMode(nextMode);
+        await themeService.setTheme(nextMode);
+        Alert.alert('Theme Updated', 'App will reload to apply the new theme.', [
+            {
+                text: 'OK',
+                onPress: async () => {
+                    await themeService.reloadApp();
+                },
+            },
+        ]);
+    };
+
+    const handlePushToggle = async (enabled: boolean) => {
+        setPushEnabled(enabled);
+        const applied = await notificationService.setPushEnabled(enabled);
+        if (enabled && !applied) {
+            setPushEnabled(false);
+            Alert.alert('Permission Needed', 'Please allow notification permission to enable alerts.');
+        }
     };
 
     const formatCurrency = (val: number) =>
@@ -172,19 +290,81 @@ export default function SettingsScreen({ navigation }: any) {
                         <Text style={styles.linkText}>Investments</Text>
                         <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
                     </TouchableOpacity>
+                    <TouchableOpacity style={styles.linkRow} onPress={() => navigation.navigate('Sips')}>
+                        <View style={[styles.linkIcon, { backgroundColor: Colors.primary + '25' }]}> 
+                            <Ionicons name="repeat" size={20} color={Colors.primary} />
+                        </View>
+                        <Text style={styles.linkText}>SIPs</Text>
+                        <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Appearance */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Appearance</Text>
+                    <View style={styles.themeRow}>
+                        <View>
+                            <Text style={styles.themeTitle}>Dark Mode</Text>
+                            <Text style={styles.themeSub}>Enable dark theme (default is light)</Text>
+                        </View>
+                        <Switch
+                            value={themeMode === 'dark'}
+                            onValueChange={handleThemeToggle}
+                            trackColor={{ false: Colors.borderLight, true: Colors.primaryLight }}
+                            thumbColor={themeMode === 'dark' ? Colors.primary : Colors.textMuted}
+                        />
+                    </View>
+                </View>
+
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Notifications</Text>
+                    <View style={styles.themeRow}>
+                        <View>
+                            <Text style={styles.themeTitle}>Push Notifications</Text>
+                            <Text style={styles.themeSub}>Budget over-limit and due-date reminders</Text>
+                        </View>
+                        <Switch
+                            value={pushEnabled}
+                            onValueChange={handlePushToggle}
+                            trackColor={{ false: Colors.borderLight, true: Colors.primaryLight }}
+                            thumbColor={pushEnabled ? Colors.primary : Colors.textMuted}
+                        />
+                    </View>
                 </View>
 
                 {/* Bank Accounts */}
                 <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Bank Accounts</Text>
-                    {stats?.bankBalances && Object.entries(stats.bankBalances).map(([bankName, balance]) => (
-                        <View key={bankName} style={styles.bankItem}>
+                    <View style={styles.banksHeaderRow}>
+                        <Text style={styles.sectionTitle}>Bank Accounts</Text>
+                        <TouchableOpacity onPress={() => setShowBankBalances((prev) => !prev)}>
+                            <Ionicons
+                                name={showBankBalances ? 'eye-off-outline' : 'eye-outline'}
+                                size={20}
+                                color={Colors.textSecondary}
+                            />
+                        </TouchableOpacity>
+                    </View>
+                    {banks.length === 0 && (
+                        <Text style={styles.emptyBanksText}>No bank accounts yet. Add one below.</Text>
+                    )}
+                    {banks.map((bank) => (
+                        <View key={bank.id} style={styles.bankItem}>
                             <View style={styles.bankIconBg}>
                                 <Ionicons name="business" size={20} color={Colors.primary} />
                             </View>
                             <View style={styles.bankDetails}>
-                                <Text style={styles.bankName}>{bankName}</Text>
-                                <Text style={styles.bankBalance}>{formatCurrency(balance as number)}</Text>
+                                <Text style={styles.bankName}>{bank.name}</Text>
+                                <Text style={styles.bankBalance}>
+                                    {showBankBalances ? formatCurrency(bank.balance) : '₹ ••••••'}
+                                </Text>
+                            </View>
+                            <View style={styles.bankActions}>
+                                <TouchableOpacity style={styles.bankEditBtn} onPress={() => openEditBankModal(bank)}>
+                                    <Ionicons name="pencil-outline" size={16} color={Colors.primary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity style={styles.bankDeleteBtn} onPress={() => handleDeleteBank(bank)}>
+                                    <Ionicons name="trash-outline" size={16} color={Colors.danger} />
+                                </TouchableOpacity>
                             </View>
                         </View>
                     ))}
@@ -281,6 +461,52 @@ export default function SettingsScreen({ navigation }: any) {
 
                 <View style={{ height: 110 }} />
             </ScrollView>
+
+            <Modal visible={showEditBankModal} transparent animationType="slide" onRequestClose={() => setShowEditBankModal(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Edit Bank</Text>
+                            <TouchableOpacity onPress={() => setShowEditBankModal(false)}>
+                                <Ionicons name="close" size={24} color={Colors.textPrimary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.inputContainer}>
+                            <Ionicons name="business-outline" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Bank name"
+                                placeholderTextColor={Colors.textMuted}
+                                value={editingBankName}
+                                onChangeText={setEditingBankName}
+                            />
+                        </View>
+
+                        <View style={styles.inputContainer}>
+                            <Text style={styles.inputCurrency}>₹</Text>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Balance"
+                                placeholderTextColor={Colors.textMuted}
+                                value={editingBankBalance}
+                                onChangeText={setEditingBankBalance}
+                                keyboardType="decimal-pad"
+                            />
+                        </View>
+
+                        <TouchableOpacity style={styles.saveGoalBtn} onPress={handleUpdateBank} disabled={savingBankEdit}>
+                            <LinearGradient colors={Colors.gradientPrimary as any} style={styles.saveGradient}>
+                                {savingBankEdit ? (
+                                    <ActivityIndicator color="#FFF" size="small" />
+                                ) : (
+                                    <Text style={styles.saveText}>Save Changes</Text>
+                                )}
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -325,6 +551,20 @@ const styles = StyleSheet.create({
         marginBottom: 16,
     },
     sectionTitle: { fontSize: 16, fontWeight: '700', color: Colors.textPrimary, marginBottom: 14 },
+    banksHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+
+    themeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    themeTitle: { fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
+    themeSub: { fontSize: 12, color: Colors.textSecondary, marginTop: 2 },
 
     // Quick links
     linkRow: {
@@ -362,6 +602,24 @@ const styles = StyleSheet.create({
     bankDetails: { flex: 1, marginLeft: 12 },
     bankName: { fontSize: 15, fontWeight: '600', color: Colors.textPrimary },
     bankBalance: { fontSize: 13, color: Colors.textSecondary, marginTop: 2 },
+    bankActions: { flexDirection: 'row', gap: 8 },
+    bankEditBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        backgroundColor: Colors.primary + '15',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    bankDeleteBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        backgroundColor: Colors.danger + '18',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    emptyBanksText: { fontSize: 13, color: Colors.textSecondary, marginBottom: 6 },
     addBankRow: { flexDirection: 'row', marginTop: 12, gap: 10 },
     addBankInput: {
         flex: 1,
@@ -411,4 +669,20 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
     logoutText: { fontSize: 16, fontWeight: '700', color: Colors.danger },
+
+    modalOverlay: { flex: 1, backgroundColor: Colors.overlay, justifyContent: 'flex-end' },
+    modalContent: {
+        backgroundColor: Colors.surface,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        padding: 24,
+        paddingBottom: 36,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    modalTitle: { fontSize: 20, fontWeight: '700', color: Colors.textPrimary },
 });

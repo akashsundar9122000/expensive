@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
     View, Text, FlatList, StyleSheet, TouchableOpacity, Alert,
-    RefreshControl, StatusBar, TextInput, Modal, ScrollView,
+    RefreshControl, StatusBar, TextInput, Modal, ScrollView, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -38,6 +38,10 @@ export default function InvestmentsScreen() {
     const [amount, setAmount] = useState('');
     const [returnPct, setReturnPct] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+    const [deletePassword, setDeletePassword] = useState('');
+    const [deleting, setDeleting] = useState(false);
 
     const loadData = useCallback(async () => {
         try {
@@ -78,20 +82,32 @@ export default function InvestmentsScreen() {
         }
     };
 
-    const handleDelete = (id: number) => {
-        Alert.alert('Delete Investment', 'Remove this investment?', [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Delete', style: 'destructive', onPress: async () => {
-                    try {
-                        await expenseService.deleteInvestment(id);
-                        setInvestments(prev => prev.filter(i => i.id !== id));
-                    } catch (err) {
-                        Alert.alert('Error', 'Failed to delete');
-                    }
-                }
-            },
-        ]);
+    const openDeleteModal = (id: number) => {
+        setDeleteTargetId(id);
+        setDeletePassword('');
+        setShowDeleteModal(true);
+    };
+
+    const confirmDeleteInvestment = async () => {
+        if (!deleteTargetId) return;
+        const password = deletePassword.trim();
+        if (!password) {
+            Alert.alert('Password Required', 'Enter your account password to delete this investment.');
+            return;
+        }
+
+        setDeleting(true);
+        try {
+            await expenseService.deleteInvestment(deleteTargetId, password);
+            setInvestments((prev) => prev.filter((i) => i.id !== deleteTargetId));
+            setShowDeleteModal(false);
+            setDeleteTargetId(null);
+            setDeletePassword('');
+        } catch {
+            Alert.alert('Error', 'Failed to delete investment. Check password and try again.');
+        } finally {
+            setDeleting(false);
+        }
     };
 
     const formatCurrency = (val: number) => '₹' + (val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 });
@@ -119,7 +135,7 @@ export default function InvestmentsScreen() {
                     </View>
                 </View>
                 <Text style={styles.itemAmount}>{formatCurrency(item.amount)}</Text>
-                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id)}>
+                <TouchableOpacity style={styles.deleteBtn} onPress={() => openDeleteModal(item.id)}>
                     <Ionicons name="close-circle" size={22} color={Colors.danger} />
                 </TouchableOpacity>
             </View>
@@ -218,6 +234,45 @@ export default function InvestmentsScreen() {
                     </View>
                 </View>
             </Modal>
+
+            {/* Delete Confirmation Modal */}
+            <Modal visible={showDeleteModal} transparent animationType="fade" onRequestClose={() => setShowDeleteModal(false)}>
+                <View style={styles.modalOverlay}>
+                    <View style={styles.deleteModalContent}>
+                        <Text style={styles.deleteTitle}>Delete Investment</Text>
+                        <Text style={styles.deleteSubtitle}>Enter your account password to confirm deletion.</Text>
+
+                        <View style={styles.inputContainer}>
+                            <Ionicons name="lock-closed-outline" size={18} color={Colors.textMuted} style={styles.inputIcon} />
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Account password"
+                                placeholderTextColor={Colors.textMuted}
+                                value={deletePassword}
+                                onChangeText={setDeletePassword}
+                                secureTextEntry
+                            />
+                        </View>
+
+                        <View style={styles.deleteActionRow}>
+                            <TouchableOpacity
+                                style={styles.cancelDeleteBtn}
+                                onPress={() => setShowDeleteModal(false)}
+                                disabled={deleting}
+                            >
+                                <Text style={styles.cancelDeleteText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.confirmDeleteBtn}
+                                onPress={confirmDeleteInvestment}
+                                disabled={deleting}
+                            >
+                                {deleting ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.confirmDeleteText}>Delete</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -281,9 +336,43 @@ const styles = StyleSheet.create({
         borderWidth: 1, borderColor: Colors.border,
         paddingHorizontal: 16, height: 52, marginBottom: 12,
     },
+    inputIcon: { marginRight: 10 },
     inputCurrency: { fontSize: 18, fontWeight: '700', color: Colors.success, marginRight: 8 },
     input: { flex: 1, color: Colors.textPrimary, fontSize: 15 },
     submitBtn: { marginTop: 8, borderRadius: 14, overflow: 'hidden', ...Shadows.medium },
     submitGradient: { height: 52, justifyContent: 'center', alignItems: 'center', borderRadius: 14 },
     submitText: { color: '#FFF', fontSize: 16, fontWeight: '700' },
+
+    deleteModalContent: {
+        backgroundColor: Colors.surface,
+        marginHorizontal: 20,
+        borderRadius: 16,
+        padding: 18,
+        borderWidth: 1,
+        borderColor: Colors.border,
+    },
+    deleteTitle: { fontSize: 18, fontWeight: '700', color: Colors.textPrimary, marginBottom: 6 },
+    deleteSubtitle: { fontSize: 13, color: Colors.textSecondary, marginBottom: 14 },
+    deleteActionRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 6 },
+    cancelDeleteBtn: {
+        paddingHorizontal: 16,
+        height: 40,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: Colors.border,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: Colors.card,
+    },
+    cancelDeleteText: { color: Colors.textPrimary, fontWeight: '600' },
+    confirmDeleteBtn: {
+        paddingHorizontal: 16,
+        height: 40,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: Colors.danger,
+        minWidth: 92,
+    },
+    confirmDeleteText: { color: '#FFF', fontWeight: '700' },
 });
