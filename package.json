@@ -1,6 +1,9 @@
 {
     "name": "expense-tracker-api",
     "private": true,
+    "scripts": {
+        "perf:check": "node scripts/perf-check.js"
+    },
     "dependencies": {
         "bcryptjs": "^2.4.3",
         "express": "^4.22.1",

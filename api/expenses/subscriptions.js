@@ -1,22 +1,19 @@
 const { query } = require('../_lib/db');
-const { getEmailFromRequest, cors } = require('../_lib/auth');
+const { getUserFromRequest, cors } = require('../_lib/auth');
+const { instrumentRequest } = require('../_lib/perf');
 
 module.exports = async (req, res) => {
+    instrumentRequest(req, res, 'expenses.subscriptions');
     cors(res);
     if (req.method === 'OPTIONS') return res.status(200).end();
 
-    const email = getEmailFromRequest(req);
-    console.log('Auth header:', req.headers.authorization);
-    console.log('Method:', req.method);
-    if (!email) {
-        console.log('Unauthorized - email not found');
+    const user = await getUserFromRequest(req);
+    if (!user) {
         return res.status(401).json({ error: 'Unauthorized - Invalid or missing token' });
     }
 
     try {
-        const userResult = await query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [email]);
-        if (userResult.rows.length === 0) return res.status(401).json({ error: 'User not found' });
-        const userId = userResult.rows[0].id;
+        const userId = user.id;
 
         if (req.method === 'GET') {
             const result = await query(
@@ -54,8 +51,7 @@ module.exports = async (req, res) => {
             let id = req.query.id;
             
             const { name, amount, icon, color, date } = req.body;
-            console.log('PUT Request - ID:', id, 'Query:', req.query, 'Name:', name, 'Amount:', amount, 'Date:', date);
-            
+
             if (!id) return res.status(400).json({ error: 'Missing ID' });
             const subId = parseInt(id, 10);
             if (isNaN(subId)) return res.status(400).json({ error: 'Invalid ID format' });
@@ -64,7 +60,6 @@ module.exports = async (req, res) => {
                 'UPDATE subscriptions SET name = $1, amount = $2, icon = $3, color = $4, date = $5 WHERE id = $6 AND user_id = $7 RETURNING id, name, amount, icon, color, date',
                 [name, amount, icon, color, date, subId, userId]
             );
-            console.log('Update result rows:', result.rows.length);
             if (result.rows.length === 0) return res.status(404).json({ error: 'Subscription not found' });
             return res.status(200).json(result.rows[0]);
         }

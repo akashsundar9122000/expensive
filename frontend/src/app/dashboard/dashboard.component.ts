@@ -58,7 +58,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     editingBudget: { category: string; limitAmount: number } | null = null;
     deletingBudgetCategory: string | null = null;
     notifiedBudgets: Set<string> = new Set();
+    notifiedGoalMilestones: Set<number> = new Set();
     dueTomorrowSips: Sip[] = [];
+    dashboardSearchTerm = '';
 
     expenseForm!: FormGroup;
 
@@ -91,9 +93,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
                         this.notifiedBudgets.add(notif.category);
                     } else if (notif.type === 'warning') {
                         this.notifiedBudgets.add(`${notif.category}_warning`);
+                    } else if (notif.type === 'success' && notif.category.startsWith('goal-milestone-')) {
+                        const milestone = Number(notif.category.replace('goal-milestone-', ''));
+                        if (Number.isFinite(milestone) && milestone > 0) {
+                            this.notifiedGoalMilestones.add(milestone);
+                        }
                     }
                 }
             });
+        });
+
+        this.stats$.pipe(takeUntil(this.destroy$)).subscribe((stats) => {
+            this.checkGoalMilestones(stats);
         });
 
         // Build chart bars and cache budget progress whenever data updates
@@ -406,6 +417,39 @@ export class DashboardComponent implements OnInit, OnDestroy {
         }
     }
 
+    private checkGoalMilestones(stats: DashboardStats): void {
+        const target = Number(stats.goalRequired || 0);
+        const collected = Number(stats.goalCollected || 0);
+        if (target <= 0 || collected < 0) {
+            return;
+        }
+
+        const progressPct = Math.min((collected / target) * 100, 100);
+        const milestones = [25, 50, 75, 100];
+
+        milestones.forEach((milestone) => {
+            if (progressPct < milestone || this.notifiedGoalMilestones.has(milestone)) {
+                return;
+            }
+
+            const categoryKey = `goal-milestone-${milestone}`;
+            if (!this.notificationService.hasNotificationToday(categoryKey, 'success')) {
+                this.notificationService.addNotification({
+                    title: `${milestone}% Goal Milestone`,
+                    message: `You have reached ${milestone}% of ${stats.goalName}. Keep the momentum going!`,
+                    type: 'success',
+                    icon: 'ph-trophy',
+                    read: false,
+                    category: categoryKey,
+                    amount: collected,
+                    limit: target
+                });
+            }
+
+            this.notifiedGoalMilestones.add(milestone);
+        });
+    }
+
     private getSipsDueTomorrow(sips: Sip[]): Sip[] {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
@@ -573,6 +617,75 @@ export class DashboardComponent implements OnInit, OnDestroy {
     closeNotificationPanel() {
         this.showNotificationPanel = false;
         this.cdr.markForCheck();
+    }
+
+    updateDashboardSearch(value: string) {
+        this.dashboardSearchTerm = String(value || '').trim().toLowerCase();
+    }
+
+    getFilteredRecentTransactions(transactions: Transaction[]): Transaction[] {
+        const source = Array.isArray(transactions) ? transactions : [];
+        const term = this.dashboardSearchTerm;
+        if (!term) {
+            return source.slice(0, 5);
+        }
+
+        return source
+            .filter((tx) => {
+                const haystack = [
+                    tx.category,
+                    tx.subCategory,
+                    tx.mode,
+                    tx.type,
+                    tx.bankName,
+                    tx.date,
+                    String(tx.amount)
+                ]
+                    .filter(Boolean)
+                    .join(' ')
+                    .toLowerCase();
+                return haystack.includes(term);
+            })
+            .slice(0, 5);
+    }
+
+    getFilteredSubscriptions(subscriptions: Subscription[]): Subscription[] {
+        const source = Array.isArray(subscriptions) ? subscriptions : [];
+        const term = this.dashboardSearchTerm;
+        if (!term) {
+            return source.slice(0, 4);
+        }
+
+        return source
+            .filter((sub) => {
+                const haystack = [sub.name, sub.date, String(sub.amount)]
+                    .filter(Boolean)
+                    .join(' ')
+                    .toLowerCase();
+                return haystack.includes(term);
+            })
+            .slice(0, 4);
+    }
+
+    getFilteredDueTomorrowSips(): Sip[] {
+        const source = Array.isArray(this.dueTomorrowSips) ? this.dueTomorrowSips : [];
+        const term = this.dashboardSearchTerm;
+        if (!term) {
+            return source;
+        }
+
+        return source.filter((sip) => {
+            const haystack = [
+                sip.investmentName,
+                sip.type,
+                String(sip.sipDay),
+                String(sip.monthlyAmount)
+            ]
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase();
+            return haystack.includes(term);
+        });
     }
 
     onSubmit() {

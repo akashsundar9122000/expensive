@@ -1,9 +1,20 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpErrorResponse } from '@angular/common/http';
 import { BehaviorSubject, Observable, tap, take, catchError, of, throwError, firstValueFrom } from 'rxjs';
 import { Transaction, Subscription, Investment, Sip, DashboardStats, User, Budget, Bank } from './models';
 import { AuthService } from './auth.service';
 import { environment } from '../../environments/environment';
+
+interface BootstrapResponse {
+    user: User;
+    transactions: Transaction[];
+    subscriptions: Subscription[];
+    investments: Investment[];
+    sips: Sip[];
+    budgets: Budget[];
+    banks: Bank[];
+    stats: DashboardStats;
+}
 
 @Injectable({
     providedIn: 'root'
@@ -20,6 +31,8 @@ export class ExpenseService {
     private apiUrl = `${environment.apiUrl}/api/expenses`;
     private isRefreshing = false;
     private refreshQueued = false;
+    private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    private useBootstrapEndpoint = true;
 
     constructor(private authService: AuthService, private http: HttpClient) {
         this.authService.getCurrentUser().subscribe(user => {
@@ -54,7 +67,18 @@ export class ExpenseService {
         }));
     }
 
-    refreshAllData() {
+    refreshAllData(delayMs = 120) {
+        if (this.refreshTimer) {
+            clearTimeout(this.refreshTimer);
+        }
+
+        this.refreshTimer = setTimeout(() => {
+            this.refreshTimer = null;
+            this.executeRefreshAllData();
+        }, Math.max(0, delayMs));
+    }
+
+    private executeRefreshAllData() {
         if (this.isRefreshing) {
             this.refreshQueued = true;
             return;
@@ -69,34 +93,56 @@ export class ExpenseService {
                 this.isRefreshing = false;
                 if (this.refreshQueued) {
                     this.refreshQueued = false;
-                    this.refreshAllData();
+                    this.executeRefreshAllData();
                 }
             });
     }
 
     private async loadAllDataSequentially() {
+        if (this.useBootstrapEndpoint) {
+            try {
+                const bootstrap = await firstValueFrom(
+                    this.http.get<BootstrapResponse>(`${this.apiUrl}/bootstrap`)
+                );
+
+                if (bootstrap) {
+                    const normalizedInvestments = this.normalizeInvestments(bootstrap.investments);
+                    this.transactions.next(bootstrap.transactions || []);
+                    this.subscriptions.next(bootstrap.subscriptions || []);
+                    this.investments.next(normalizedInvestments);
+                    this.sips.next(bootstrap.sips || []);
+                    this.budgets.next(bootstrap.budgets || []);
+                    this.stats.next(bootstrap.stats || this.getDefaultStats());
+                    this.banks.next(bootstrap.banks || []);
+                    this.user.next(bootstrap.user || null);
+                    return;
+                }
+            } catch (error) {
+                const status = (error as HttpErrorResponse)?.status;
+                if (status === 401 || status === 404 || status === 405) {
+                    this.useBootstrapEndpoint = false;
+                }
+            }
+        }
+
         const user = await firstValueFrom(this.authService.getCurrentUser().pipe(take(1)));
-        const transactions = await firstValueFrom(
-            this.http.get<Transaction[]>(`${this.apiUrl}/transactions`).pipe(catchError(() => of([])))
-        );
-        const subscriptions = await firstValueFrom(
-            this.http.get<Subscription[]>(`${this.apiUrl}/subscriptions`).pipe(catchError(() => of([])))
-        );
-        const investments = await firstValueFrom(
-            this.http.get<Investment[]>(`${this.apiUrl}/investments`).pipe(catchError(() => of([])))
-        );
-        const sips = await firstValueFrom(
-            this.http.get<Sip[]>(`${this.apiUrl}/sips`).pipe(catchError(() => of([])))
-        );
-        const budgets = await firstValueFrom(
-            this.http.get<Budget[]>(`${this.apiUrl}/budgets`).pipe(catchError(() => of([])))
-        );
-        const statsData = await firstValueFrom(
-            this.http.get<DashboardStats>(`${this.apiUrl}/stats`).pipe(catchError(() => of(this.getDefaultStats())))
-        );
-        const bankList = await firstValueFrom(
-            this.http.get<Bank[]>(`${this.apiUrl}/banks`).pipe(catchError(() => of([])))
-        );
+        const [
+            transactions,
+            subscriptions,
+            investments,
+            sips,
+            budgets,
+            statsData,
+            bankList
+        ] = await Promise.all([
+            firstValueFrom(this.http.get<Transaction[]>(`${this.apiUrl}/transactions`).pipe(catchError(() => of([])))),
+            firstValueFrom(this.http.get<Subscription[]>(`${this.apiUrl}/subscriptions`).pipe(catchError(() => of([])))),
+            firstValueFrom(this.http.get<Investment[]>(`${this.apiUrl}/investments`).pipe(catchError(() => of([])))),
+            firstValueFrom(this.http.get<Sip[]>(`${this.apiUrl}/sips`).pipe(catchError(() => of([])))),
+            firstValueFrom(this.http.get<Budget[]>(`${this.apiUrl}/budgets`).pipe(catchError(() => of([])))),
+            firstValueFrom(this.http.get<DashboardStats>(`${this.apiUrl}/stats`).pipe(catchError(() => of(this.getDefaultStats())))),
+            firstValueFrom(this.http.get<Bank[]>(`${this.apiUrl}/banks`).pipe(catchError(() => of([]))))
+        ]);
 
         const normalizedInvestments = this.normalizeInvestments(investments);
         this.transactions.next(transactions);
@@ -259,7 +305,7 @@ export class ExpenseService {
         return this.http.post<Subscription>(`${this.apiUrl}/subscriptions`, sub).pipe(
             tap(() => {
                 // Ensure UI updates by triggering a fresh load
-                setTimeout(() => this.refreshAllData(), 100);
+                this.refreshAllData(100);
             })
         );
     }
@@ -272,21 +318,21 @@ export class ExpenseService {
             tap((response) => {
                 console.log('EditSubscription response:', response);
                 // Ensure UI updates by triggering a fresh load
-                setTimeout(() => this.refreshAllData(), 100);
+                this.refreshAllData(100);
             }),
             catchError((error) => {
                 console.error('EditSubscription primary route failed, trying fallback route:', error);
                 return this.http.put<Subscription>(`${this.apiUrl}/subscriptions/${id}`, sub, requestOptions).pipe(
                     tap((response) => {
                         console.log('EditSubscription fallback response:', response);
-                        setTimeout(() => this.refreshAllData(), 100);
+                        this.refreshAllData(100);
                     }),
                     catchError((fallbackError) => {
                         console.error('EditSubscription second route failed, trying POST fallback:', fallbackError);
                         return this.http.post<Subscription>(`${this.apiUrl}/subscriptions/update?id=${id}`, sub, requestOptions).pipe(
                             tap((response) => {
                                 console.log('EditSubscription POST fallback response:', response);
-                                setTimeout(() => this.refreshAllData(), 100);
+                                this.refreshAllData(100);
                             }),
                             catchError((postFallbackError) => {
                                 console.error('EditSubscription POST fallback error:', postFallbackError);
@@ -351,6 +397,53 @@ export class ExpenseService {
         }).subscribe({
             next: () => this.refreshAllData(),
             error: (err) => { console.error('Failed to fund goal:', err); }
+        });
+    }
+
+    updateGoal(goalName: string, goalRequired: number) {
+        const trimmedName = (goalName || '').trim();
+        const parsedRequired = Number(goalRequired);
+
+        if (!trimmedName || !Number.isFinite(parsedRequired) || parsedRequired <= 0) {
+            console.error('Failed to update goal: valid goal name and required amount are required');
+            return;
+        }
+
+        this.http.put(`${this.apiUrl}/preferences`, {
+            goalName: trimmedName,
+            goalRequired: parsedRequired
+        }).subscribe({
+            next: () => this.refreshAllData(),
+            error: (err) => { console.error('Failed to update goal:', err); }
+        });
+    }
+
+    setGoalCollected(amount: number) {
+        const parsedAmount = Number(amount);
+        if (!Number.isFinite(parsedAmount) || parsedAmount < 0) {
+            console.error('Failed to set goal collected: amount must be a non-negative number');
+            return;
+        }
+
+        this.http.put(`${this.apiUrl}/preferences`, {
+            goalCollected: parsedAmount
+        }).subscribe({
+            next: () => this.refreshAllData(),
+            error: (err) => { console.error('Failed to set goal collected:', err); }
+        });
+    }
+
+    adjustGoalCollected(delta: number) {
+        const parsedDelta = Number(delta);
+        if (!Number.isFinite(parsedDelta) || parsedDelta === 0) {
+            return;
+        }
+
+        this.http.put(`${this.apiUrl}/preferences`, {
+            goalCollectedIncrement: parsedDelta
+        }).subscribe({
+            next: () => this.refreshAllData(),
+            error: (err) => { console.error('Failed to adjust goal collected:', err); }
         });
     }
 

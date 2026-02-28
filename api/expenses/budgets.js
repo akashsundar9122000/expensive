@@ -1,17 +1,17 @@
 const { query } = require('../_lib/db');
-const { getEmailFromRequest, cors } = require('../_lib/auth');
+const { getUserFromRequest, cors } = require('../_lib/auth');
+const { instrumentRequest } = require('../_lib/perf');
 
 module.exports = async (req, res) => {
+    instrumentRequest(req, res, 'expenses.budgets');
     cors(res);
     if (req.method === 'OPTIONS') return res.status(200).end();
 
-    const email = getEmailFromRequest(req);
-    if (!email) return res.status(401).json({ error: 'Unauthorized' });
+    const user = await getUserFromRequest(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
     try {
-        const userResult = await query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [email]);
-        if (userResult.rows.length === 0) return res.status(401).json({ error: 'User not found' });
-        const userId = userResult.rows[0].id;
+        const userId = user.id;
 
         if (req.method === 'GET') {
             const result = await query('SELECT category, limit_amount as "limitAmount" FROM budgets WHERE user_id = $1', [userId]);

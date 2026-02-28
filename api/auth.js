@@ -2,8 +2,10 @@ const bcrypt = require('bcryptjs');
 const { randomUUID } = require('crypto');
 const { query } = require('./_lib/db');
 const { generateToken, getEmailFromRequest, cors } = require('./_lib/auth');
+const { instrumentRequest } = require('./_lib/perf');
 
 module.exports = async (req, res) => {
+    instrumentRequest(req, res, 'auth');
     cors(res);
     if (req.method === 'OPTIONS') return res.status(200).end();
 
@@ -24,7 +26,7 @@ module.exports = async (req, res) => {
             const passwordMatch = await bcrypt.compare(password, user.password);
             if (!passwordMatch) return res.status(401).json({ error: 'Invalid credentials' });
 
-            const token = generateToken(email);
+            const token = generateToken(user.email, user.id);
             return res.status(200).json({
                 token,
                 name: user.name,
@@ -59,7 +61,7 @@ module.exports = async (req, res) => {
                 [user.id, 'Savings Goal', 100000, 0, 0, 0]
             );
 
-            const token = generateToken(email);
+            const token = generateToken(user.email, user.id);
             return res.status(200).json({ token, name: user.name, email: user.email });
         } catch (err) {
             console.error('Register error:', err);
@@ -100,7 +102,7 @@ module.exports = async (req, res) => {
             }
 
             const user = userResult.rows[0];
-            const token = generateToken(user.email);
+            const token = generateToken(user.email, user.id);
             return res.status(200).json({
                 token,
                 name: user.name,

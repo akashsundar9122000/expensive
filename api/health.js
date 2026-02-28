@@ -1,4 +1,5 @@
 const { query } = require('./_lib/db');
+const { instrumentRequest } = require('./_lib/perf');
 
 const REQUIRED_TABLES = [
     'users',
@@ -11,6 +12,7 @@ const REQUIRED_TABLES = [
 ];
 
 module.exports = async (req, res) => {
+    instrumentRequest(req, res, 'health');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');

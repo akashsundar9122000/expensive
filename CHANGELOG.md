@@ -1,5 +1,44 @@
 # Expense Tracker - Recent Updates
 
+## Date: February 28, 2026
+
+### Goals Tab - Major Upgrade
+
+#### 1. Interactive Goal Management
+- Added goal editing directly in Goals tab (goal name + target amount)
+- Added save/cancel goal actions with validation
+- Added one-click suggested-goal presets to instantly switch active goal
+- Added reset action to clear collected goal amount
+
+#### 2. Smarter Funding Experience
+- Added quick-fund chips (`₹1,000`, `₹5,000`, `₹10,000`, `₹25,000`)
+- Added enhanced custom funding input with instant feedback message
+- Added local funding activity timeline showing recent contributions on the device
+
+#### 3. Goal Planner & Forecasting
+- Added monthly contribution planner with persistent local state
+- Added optional target-date planning support
+- Added projected completion estimate based on configured monthly contribution
+- Added required monthly amount calculation for selected target date
+- Added plan health status (`On Track` / `Needs Boost`)
+
+#### 4. Milestone Tracking Enhancements
+- Added milestone badge system for 25% / 50% / 75% / 100%
+- Added visual milestone state on progress track
+- Added milestone notifications from Goals tab when new milestone is reached
+
+### New App-Wide Feature
+
+#### Goal Milestone Notifications on Dashboard
+- Added global milestone watcher in Dashboard flow
+- App now raises notification-panel updates when goal progress crosses 25/50/75/100%
+- Milestone notices are de-duplicated in-session to prevent notification spam
+
+### Files Updated
+- `frontend/src/app/services/expense.service.ts`
+- `frontend/src/app/dashboard/goals/goals.component.ts`
+- `frontend/src/app/dashboard/dashboard.component.ts`
+
 ## Date: February 25, 2026
 
 ### Features Added

@@ -1,13 +1,16 @@
 const { query } = require('../_lib/db');
-const { getEmailFromRequest, cors } = require('../_lib/auth');
+const { getUserFromRequest, cors } = require('../_lib/auth');
 const bcrypt = require('bcryptjs');
+const { instrumentRequest } = require('../_lib/perf');
 
 module.exports = async (req, res) => {
+    instrumentRequest(req, res, 'expenses.investments');
     cors(res);
     if (req.method === 'OPTIONS') return res.status(200).end();
 
-    const email = getEmailFromRequest(req);
-    if (!email) return res.status(401).json({ error: 'Unauthorized' });
+    const requiresPassword = req.method === 'DELETE';
+    const user = await getUserFromRequest(req, { includePassword: requiresPassword });
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
     const parsePositiveAmount = (value) => {
         const parsed = Number(value);
@@ -16,23 +19,8 @@ module.exports = async (req, res) => {
     };
 
     try {
-        const userResult = await query('SELECT id, password FROM users WHERE LOWER(email) = LOWER($1)', [email]);
-        if (userResult.rows.length === 0) return res.status(401).json({ error: 'User not found' });
-        const userId = userResult.rows[0].id;
-        const userPassword = userResult.rows[0].password;
-
-        // Ensure investments table exists (idempotent)
-        await query(`
-            CREATE TABLE IF NOT EXISTS investments (
-                id BIGSERIAL PRIMARY KEY,
-                user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                type TEXT NOT NULL,
-                name TEXT NOT NULL,
-                amount NUMERIC NOT NULL,
-                return_pct NUMERIC,
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-            )
-        `);
+        const userId = user.id;
+        const userPassword = user.password;
 
         if (req.method === 'GET') {
             const result = await query(
