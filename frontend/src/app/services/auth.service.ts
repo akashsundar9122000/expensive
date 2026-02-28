@@ -182,9 +182,10 @@ export class AuthService {
 
     private persistSession(response: any) {
         localStorage.setItem('token', response.token);
+        const normalizedEmail = (response?.email || '').trim().toLowerCase();
         const user: User = {
             name: response.name,
-            email: response.email,
+            email: normalizedEmail,
             avatar: response.avatarUrl,
             bankAccounts: []
         };

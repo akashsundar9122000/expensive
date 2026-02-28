@@ -2,8 +2,8 @@
 
 <div class="cashflow-loader-overlay" *ngIf="isLoading$ | async" aria-live="polite" aria-busy="true">
 	<div class="cashflow-loader-card" role="status">
-		<h3>Loading your cash flow</h3>
-		<p>Syncing accounts and moving money data across screens...</p>
+		<h3>{{ (loadingMessage$ | async)?.title || 'Loading your cash flow' }}</h3>
+		<p>{{ (loadingMessage$ | async)?.subtitle || 'Syncing accounts and moving money data across screens...' }}</p>
 
 		<div class="cashflow-track" aria-hidden="true">
 			<span class="cash-node"></span>

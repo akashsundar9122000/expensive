@@ -17,6 +17,8 @@ const stats = require('./api/expenses/stats');
 const preferences = require('./api/expenses/preferences');
 const banks = require('./api/expenses/banks');
 const bootstrap = require('./api/expenses/bootstrap');
+const market = require('./api/expenses/market');
+const indianStocks = require('./api/expenses/stocks/indian');
 
 // Helper: adapt Vercel-style handler (req, res) to Express
 function handle(handler) {
@@ -67,6 +69,12 @@ app.all('/api/expenses/banks', handle(banks));
 
 // Bootstrap
 app.all('/api/expenses/bootstrap', handle(bootstrap));
+
+// Market
+app.all('/api/expenses/market', handle(market));
+
+// Indian Stocks list
+app.all('/api/expenses/stocks/indian', handle(indianStocks));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

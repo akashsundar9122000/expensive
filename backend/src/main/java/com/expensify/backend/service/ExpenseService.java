@@ -2,14 +2,32 @@ package com.expensify.backend.service;
 
 import com.expensify.backend.model.*;
 import com.expensify.backend.repository.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 @Service
@@ -23,6 +41,41 @@ public class ExpenseService {
     private final SipRepository sipRepository;
     private final BudgetRepository budgetRepository;
     private final PasswordEncoder passwordEncoder;
+        private final ObjectMapper objectMapper;
+
+        private static final String MARKET_SOURCE = "Yahoo Finance";
+        private static final HttpClient MARKET_HTTP = HttpClient.newHttpClient();
+        private static final String NSE_EQUITY_CSV_URL = "https://archives.nseindia.com/content/equities/EQUITY_L.csv";
+        private static final Duration INDIAN_STOCKS_CACHE_TTL = Duration.ofHours(12);
+        private static final Pattern BRACKET_SYMBOL_PATTERN = Pattern.compile("[\\[(]([A-Za-z0-9.^-]{2,20}(?:\\.(?:NS|BO))?)[\\])]", Pattern.CASE_INSENSITIVE);
+        private static final Pattern TICKER_PATTERN = Pattern.compile("\\b[A-Z0-9]{2,15}(?:\\.(?:NS|BO))?\\b");
+        private static final Set<String> COMMON_NON_TICKER_WORDS = Set.of("STOCK", "LTD", "LIMITED", "INDUSTRIES", "COMPANY", "INC", "PLC", "ETF", "FUND");
+        private static final Map<String, String> COMPANY_TO_SYMBOL = Map.ofEntries(
+            Map.entry("RELIANCE", "RELIANCE.NS"),
+            Map.entry("RELIANCE INDUSTRIES", "RELIANCE.NS"),
+            Map.entry("TCS", "TCS.NS"),
+            Map.entry("INFOSYS", "INFY.NS"),
+            Map.entry("HDFC BANK", "HDFCBANK.NS"),
+            Map.entry("HDFCBANK", "HDFCBANK.NS"),
+            Map.entry("ICICI BANK", "ICICIBANK.NS"),
+            Map.entry("ICICIBANK", "ICICIBANK.NS"),
+            Map.entry("SBI", "SBIN.NS"),
+            Map.entry("STATE BANK OF INDIA", "SBIN.NS"),
+            Map.entry("ITC", "ITC.NS"),
+            Map.entry("LT", "LT.NS"),
+            Map.entry("L&T", "LT.NS"),
+            Map.entry("HINDUNILVR", "HINDUNILVR.NS"),
+            Map.entry("BHARTIARTL", "BHARTIARTL.NS"),
+            Map.entry("KOTAKBANK", "KOTAKBANK.NS")
+        );
+            private static final List<String> INDIAN_MARKET_UNIVERSE = List.of(
+                "RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS",
+                "SBIN.NS", "LT.NS", "ITC.NS", "BHARTIARTL.NS", "HINDUNILVR.NS",
+                "KOTAKBANK.NS", "AXISBANK.NS", "BAJFINANCE.NS", "MARUTI.NS", "ASIANPAINT.NS",
+                "ADANIENT.NS", "TITAN.NS", "WIPRO.NS", "NTPC.NS", "POWERGRID.NS"
+            );
+                private volatile Instant indianStocksCachedAt = Instant.EPOCH;
+                private volatile List<Map<String, String>> indianStocksCache = List.of();
 
     public List<Transaction> getTransactions(User user) {
         return transactionRepository.findByUserOrderByDateDesc(user);
@@ -266,6 +319,481 @@ public class ExpenseService {
                         && t.getDate().getMonthValue() == now.getMonthValue())
                 .map(Transaction::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    public Map<String, Object> getMarketData(User user) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("source", MARKET_SOURCE);
+        response.put("asOf", Instant.now().toString());
+
+        List<Map<String, Object>> indices = new ArrayList<>();
+        List<Map<String, Object>> topGainers = new ArrayList<>();
+        List<Map<String, Object>> topLosers = new ArrayList<>();
+        List<Map<String, Object>> investedStocks = new ArrayList<>();
+        List<Map<String, Object>> unresolvedStocks = new ArrayList<>();
+
+        try {
+            indices.add(fetchChartQuote("^NSEI"));
+        } catch (Exception ignored) {
+        }
+
+        try {
+            indices.add(fetchChartQuote("^BSESN"));
+        } catch (Exception ignored) {
+        }
+
+        List<Map<String, Object>> indianMovers = fetchIndianMarketMovers();
+        topGainers = indianMovers.stream()
+            .sorted((a, b) -> Double.compare(toDouble(b.get("changePercent")), toDouble(a.get("changePercent"))))
+            .limit(5)
+            .collect(Collectors.toList());
+        topLosers = indianMovers.stream()
+            .sorted(Comparator.comparingDouble(a -> toDouble(a.get("changePercent"))))
+            .limit(5)
+            .collect(Collectors.toList());
+
+        List<Investment> stocks = investmentRepository.findByUser(user).stream()
+                .filter(inv -> inv.getType() != null && "stock".equalsIgnoreCase(inv.getType().trim()))
+                .sorted(Comparator.comparing(Investment::getId, Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+
+        Map<String, List<Investment>> lotsBySymbol = new LinkedHashMap<>();
+        for (Investment stock : stocks) {
+            String symbol = resolveSymbol(stock.getName());
+            if (symbol == null || symbol.isBlank()) {
+                unresolvedStocks.add(Map.of(
+                        "investmentId", stock.getId(),
+                        "name", stock.getName() == null ? "" : stock.getName()
+                ));
+                continue;
+            }
+
+            String normalizedSymbol = normalizeSymbol(symbol);
+            lotsBySymbol.computeIfAbsent(normalizedSymbol, key -> new ArrayList<>()).add(stock);
+        }
+
+        int processedSymbols = 0;
+        for (Map.Entry<String, List<Investment>> entry : lotsBySymbol.entrySet()) {
+            String symbol = entry.getKey();
+            List<Investment> lots = entry.getValue();
+
+            try {
+                Map<String, Object> quote = fetchChartQuote(symbol);
+                double currentPrice = toDouble(quote.get("price"));
+
+                double totalInvested = 0.0;
+                double sharesHeld = 0.0;
+
+                for (Investment lot : lots) {
+                    double investedAmount = lot.getAmount() != null ? lot.getAmount().doubleValue() : 0.0;
+                    if (investedAmount <= 0) {
+                        continue;
+                    }
+
+                    totalInvested += investedAmount;
+
+                    Instant lotCreatedAt = lot.getCreatedAt() != null ? lot.getCreatedAt() : Instant.now();
+                    double buyPrice = fetchHistoricalCloseOnOrBefore(symbol, lotCreatedAt);
+                    if (buyPrice <= 0) {
+                        buyPrice = currentPrice;
+                    }
+                    if (buyPrice > 0) {
+                        sharesHeld += investedAmount / buyPrice;
+                    }
+                }
+
+                double currentValue = sharesHeld * currentPrice;
+                double pnl = currentValue - totalInvested;
+                double pnlPercent = totalInvested > 0 ? (pnl / totalInvested) * 100.0 : 0.0;
+
+                Investment representativeLot = lots.get(0);
+                quote.put("investmentId", representativeLot.getId());
+                quote.put("investmentName", representativeLot.getName() == null ? "" : representativeLot.getName());
+                quote.put("totalInvested", totalInvested);
+                quote.put("sharesHeld", sharesHeld);
+                quote.put("currentValue", currentValue);
+                quote.put("pnl", pnl);
+                quote.put("pnlPercent", pnlPercent);
+                quote.put("lotsCount", lots.size());
+                investedStocks.add(quote);
+            } catch (Exception ignored) {
+                Investment representativeLot = lots.get(0);
+                unresolvedStocks.add(Map.of(
+                        "investmentId", representativeLot.getId(),
+                        "name", representativeLot.getName() == null ? "" : representativeLot.getName()
+                ));
+            }
+
+            processedSymbols++;
+            if (processedSymbols >= 20) {
+                break;
+            }
+        }
+
+        response.put("indices", indices);
+        response.put("topGainers", topGainers);
+        response.put("topLosers", topLosers);
+        response.put("investedStocks", investedStocks);
+        response.put("unresolvedStocks", unresolvedStocks);
+        return response;
+    }
+
+    public List<Map<String, String>> getIndianStocks() {
+        Instant now = Instant.now();
+        if (!indianStocksCache.isEmpty() && Duration.between(indianStocksCachedAt, now).compareTo(INDIAN_STOCKS_CACHE_TTL) < 0) {
+            return indianStocksCache;
+        }
+
+        synchronized (this) {
+            now = Instant.now();
+            if (!indianStocksCache.isEmpty() && Duration.between(indianStocksCachedAt, now).compareTo(INDIAN_STOCKS_CACHE_TTL) < 0) {
+                return indianStocksCache;
+            }
+
+            try {
+                HttpRequest request = HttpRequest.newBuilder(URI.create(NSE_EQUITY_CSV_URL))
+                        .header("User-Agent", "Mozilla/5.0")
+                        .header("Accept", "text/csv,*/*")
+                        .GET()
+                        .build();
+
+                HttpResponse<String> response = MARKET_HTTP.send(request, HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                    return indianStocksCache;
+                }
+
+                String body = response.body() == null ? "" : response.body();
+                String[] lines = body.split("\\r?\\n");
+                if (lines.length <= 1) {
+                    return indianStocksCache;
+                }
+
+                List<Map<String, String>> parsed = new ArrayList<>();
+                for (int i = 1; i < lines.length; i++) {
+                    String line = lines[i].trim();
+                    if (line.isEmpty()) {
+                        continue;
+                    }
+
+                    List<String> cols = splitCsvLine(line);
+                    if (cols.size() < 2) {
+                        continue;
+                    }
+
+                    String symbol = stringValue(cols.get(0), "").toUpperCase(Locale.ROOT);
+                    String name = stringValue(cols.get(1), "");
+
+                    if (symbol.isBlank() || name.isBlank()) {
+                        continue;
+                    }
+
+                    Map<String, String> stock = new LinkedHashMap<>();
+                    stock.put("symbol", symbol);
+                    stock.put("name", name);
+                    stock.put("display", symbol + " - " + name);
+                    parsed.add(stock);
+                }
+
+                parsed.sort(Comparator.comparing(item -> item.getOrDefault("symbol", "")));
+                indianStocksCache = parsed;
+                indianStocksCachedAt = Instant.now();
+                return indianStocksCache;
+            } catch (Exception ignored) {
+                return indianStocksCache;
+            }
+        }
+    }
+
+    private List<String> splitCsvLine(String line) {
+        List<String> values = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inQuotes = false;
+
+        for (int i = 0; i < line.length(); i++) {
+            char ch = line.charAt(i);
+            if (ch == '"') {
+                if (inQuotes && i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                    current.append('"');
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+                continue;
+            }
+
+            if (ch == ',' && !inQuotes) {
+                values.add(current.toString().trim());
+                current.setLength(0);
+                continue;
+            }
+
+            current.append(ch);
+        }
+
+        values.add(current.toString().trim());
+        return values;
+    }
+
+    private List<Map<String, Object>> fetchIndianMarketMovers() {
+        List<Map<String, Object>> quotes = new ArrayList<>();
+        for (String symbol : INDIAN_MARKET_UNIVERSE) {
+            try {
+                Map<String, Object> quote = fetchChartQuote(symbol);
+                String exchange = stringValue(quote.get("exchange"), "").toUpperCase(Locale.ROOT);
+                String resolvedSymbol = stringValue(quote.get("symbol"), "").toUpperCase(Locale.ROOT);
+                if (resolvedSymbol.endsWith(".NS") || resolvedSymbol.endsWith(".BO") || exchange.contains("NSE") || exchange.contains("BSE")) {
+                    quotes.add(quote);
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return quotes;
+    }
+
+    private Map<String, Object> fetchChartQuote(String symbol) throws Exception {
+        String safeSymbol = URLEncoder.encode(symbol, StandardCharsets.UTF_8);
+        Map<String, Object> root = fetchJson("https://query1.finance.yahoo.com/v8/finance/chart/" + safeSymbol + "?interval=1d&range=1d");
+
+        Map<String, Object> chart = asMap(root.get("chart"));
+        List<?> resultList = asList(chart.get("result"));
+        Map<String, Object> result = resultList.isEmpty() ? Map.of() : asMap(resultList.get(0));
+        Map<String, Object> meta = asMap(result.get("meta"));
+
+        double price = toDouble(meta.get("regularMarketPrice"));
+        double previousClose = toDouble(meta.get("chartPreviousClose"));
+        double change = price - previousClose;
+        double changePercent = previousClose > 0 ? (change / previousClose) * 100.0 : 0.0;
+
+        Map<String, Object> quote = new LinkedHashMap<>();
+        quote.put("symbol", stringValue(meta.get("symbol"), symbol));
+        quote.put("name", stringValue(meta.get("longName"), stringValue(meta.get("shortName"), symbol)));
+        quote.put("exchange", stringValue(meta.get("fullExchangeName"), stringValue(meta.get("exchangeName"), "")));
+        quote.put("currency", stringValue(meta.get("currency"), "INR"));
+        quote.put("price", price);
+        quote.put("previousClose", previousClose);
+        quote.put("change", change);
+        quote.put("changePercent", changePercent);
+        quote.put("marketTime", toLong(meta.get("regularMarketTime")));
+        return quote;
+    }
+
+    private String resolveSymbol(String investmentName) {
+        String direct = extractSymbolFromName(investmentName);
+        if (direct != null && !direct.isBlank()) {
+            return direct;
+        }
+
+        String mapped = COMPANY_TO_SYMBOL.getOrDefault(normalizeName(investmentName), "");
+        if (!mapped.isBlank()) {
+            return mapped;
+        }
+
+        try {
+            return searchYahooSymbol(investmentName);
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private String searchYahooSymbol(String investmentName) throws Exception {
+        String query = stringValue(investmentName, "").trim();
+        if (query.isBlank()) {
+            return "";
+        }
+
+        String url = "https://query1.finance.yahoo.com/v1/finance/search?q="
+                + URLEncoder.encode(query, StandardCharsets.UTF_8)
+                + "&quotesCount=8&newsCount=0";
+
+        Map<String, Object> root = fetchJson(url);
+        List<?> quotes = asList(root.get("quotes"));
+        for (Object rawQuote : quotes) {
+            Map<String, Object> quote = asMap(rawQuote);
+            String symbol = normalizeSymbol(stringValue(quote.get("symbol"), ""));
+            String quoteType = stringValue(quote.get("quoteType"), "").toUpperCase(Locale.ROOT);
+            String exchange = stringValue(quote.get("exchange"), "").toUpperCase(Locale.ROOT);
+
+            if (symbol.isBlank()) {
+                continue;
+            }
+
+            boolean indiaExchange = exchange.contains("NSE") || exchange.contains("BSE") || symbol.endsWith(".NS") || symbol.endsWith(".BO");
+            boolean validType = quoteType.isBlank() || "EQUITY".equals(quoteType);
+            if (indiaExchange && validType) {
+                return symbol;
+            }
+        }
+
+        return "";
+    }
+
+    private String extractSymbolFromName(String investmentName) {
+        String name = stringValue(investmentName, "").trim();
+        if (name.isBlank()) {
+            return "";
+        }
+
+        Matcher bracketMatcher = BRACKET_SYMBOL_PATTERN.matcher(name);
+        if (bracketMatcher.find()) {
+            return normalizeSymbol(bracketMatcher.group(1));
+        }
+
+        Matcher tickerMatcher = TICKER_PATTERN.matcher(name.toUpperCase(Locale.ROOT));
+        if (tickerMatcher.find()) {
+            String candidate = tickerMatcher.group(0);
+            if (!COMMON_NON_TICKER_WORDS.contains(candidate)) {
+                return normalizeSymbol(candidate);
+            }
+        }
+
+        return "";
+    }
+
+    private String normalizeName(String value) {
+        return stringValue(value, "")
+                .replaceAll("[^A-Za-z0-9& ]", " ")
+                .replaceAll("\\s+", " ")
+                .trim()
+                .toUpperCase(Locale.ROOT);
+    }
+
+    private String normalizeSymbol(String symbol) {
+        String raw = stringValue(symbol, "").trim().toUpperCase(Locale.ROOT);
+        if (raw.isBlank()) {
+            return "";
+        }
+
+        if (raw.startsWith("^") || raw.endsWith(".NS") || raw.endsWith(".BO")) {
+            return raw;
+        }
+
+        return raw.matches("^[A-Z0-9]{2,15}$") ? raw + ".NS" : raw;
+    }
+
+    private double fetchHistoricalCloseOnOrBefore(String symbol, Instant targetInstant) {
+        try {
+            String safeSymbol = URLEncoder.encode(symbol, StandardCharsets.UTF_8);
+            LocalDate targetDate = targetInstant.atZone(ZoneOffset.UTC).toLocalDate();
+
+            long period1 = targetDate.minusDays(14).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+            long period2 = targetDate.plusDays(1).atStartOfDay(ZoneOffset.UTC).toEpochSecond();
+
+            Map<String, Object> root = fetchJson(
+                    "https://query1.finance.yahoo.com/v8/finance/chart/" + safeSymbol
+                            + "?interval=1d&period1=" + period1
+                            + "&period2=" + period2);
+
+            Map<String, Object> chart = asMap(root.get("chart"));
+            List<?> resultList = asList(chart.get("result"));
+            Map<String, Object> result = resultList.isEmpty() ? Map.of() : asMap(resultList.get(0));
+
+            List<?> timestamps = asList(result.get("timestamp"));
+            Map<String, Object> indicators = asMap(result.get("indicators"));
+            List<?> quoteList = asList(indicators.get("quote"));
+            Map<String, Object> quote = quoteList.isEmpty() ? Map.of() : asMap(quoteList.get(0));
+            List<?> closes = asList(quote.get("close"));
+
+            double selectedClose = 0.0;
+            LocalDate selectedDate = null;
+
+            int maxLen = Math.min(timestamps.size(), closes.size());
+            for (int i = 0; i < maxLen; i++) {
+                long epochSec = toLong(timestamps.get(i));
+                if (epochSec <= 0) {
+                    continue;
+                }
+
+                double close = toDouble(closes.get(i));
+                if (close <= 0) {
+                    continue;
+                }
+
+                LocalDate quoteDate = Instant.ofEpochSecond(epochSec).atZone(ZoneOffset.UTC).toLocalDate();
+                if (quoteDate.isAfter(targetDate)) {
+                    continue;
+                }
+
+                if (selectedDate == null || quoteDate.isAfter(selectedDate)) {
+                    selectedDate = quoteDate;
+                    selectedClose = close;
+                }
+            }
+
+            return selectedClose;
+        } catch (Exception ignored) {
+            return 0.0;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> fetchJson(String url) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                .header("User-Agent", "Mozilla/5.0")
+                .header("Accept", "application/json,text/plain,*/*")
+                .GET()
+                .build();
+        HttpResponse<String> response = MARKET_HTTP.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new IllegalStateException("Market request failed: " + response.statusCode());
+        }
+        return objectMapper.readValue(response.body(), Map.class);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> asMap(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> casted = new HashMap<>();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                if (entry.getKey() != null) {
+                    casted.put(String.valueOf(entry.getKey()), entry.getValue());
+                }
+            }
+            return casted;
+        }
+        return Map.of();
+    }
+
+    private List<?> asList(Object value) {
+        if (value instanceof List<?> list) {
+            return list;
+        }
+        return List.of();
+    }
+
+    private String stringValue(Object value, String fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        String parsed = String.valueOf(value).trim();
+        return parsed.isEmpty() ? fallback : parsed;
+    }
+
+    private double toDouble(Object value) {
+        if (value == null) {
+            return 0.0;
+        }
+        if (value instanceof Number number) {
+            return number.doubleValue();
+        }
+        try {
+            return Double.parseDouble(String.valueOf(value));
+        } catch (NumberFormatException ex) {
+            return 0.0;
+        }
+    }
+
+    private long toLong(Object value) {
+        if (value == null) {
+            return 0L;
+        }
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (NumberFormatException ex) {
+            return 0L;
+        }
     }
 
     @Transactional

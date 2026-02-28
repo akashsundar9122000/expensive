@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpErrorResponse } from '@angular/common/http';
 import { BehaviorSubject, Observable, tap, take, catchError, of, throwError, firstValueFrom } from 'rxjs';
-import { Transaction, Subscription, Investment, Sip, DashboardStats, User, Budget, Bank } from './models';
+import { Transaction, Subscription, Investment, Sip, DashboardStats, User, Budget, Bank, MarketDataResponse, IndianStockOption } from './models';
 import { AuthService } from './auth.service';
 import { environment } from '../../environments/environment';
 
@@ -346,6 +346,14 @@ export class ExpenseService {
     getSips(): Observable<Sip[]> { return this.sips.asObservable(); }
     getBudgets(): Observable<Budget[]> { return this.budgets.asObservable(); }
     getBanks(): Observable<Bank[]> { return this.banks.asObservable(); }
+
+    getMarketData(): Observable<MarketDataResponse> {
+        return this.http.get<MarketDataResponse>(`${this.apiUrl}/market`, this.getAuthRequestOptions());
+    }
+
+    getIndianStocks(): Observable<IndianStockOption[]> {
+        return this.http.get<IndianStockOption[]>(`${this.apiUrl}/stocks/indian`, this.getAuthRequestOptions());
+    }
 
     private getAuthRequestOptions() {
         const token = this.authService.getValidToken();

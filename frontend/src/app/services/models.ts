@@ -69,6 +69,51 @@ export interface DashboardStats {
     bankBalances: { [key: string]: number };
 }
 
+export interface MarketQuote {
+    symbol: string;
+    name: string;
+    exchange: string;
+    currency: string;
+    price: number;
+    previousClose: number;
+    change: number;
+    changePercent: number;
+    marketTime: number;
+}
+
+export interface InvestedMarketQuote extends MarketQuote {
+    investmentId: number;
+    investmentName: string;
+    totalInvested: number;
+    sharesHeld: number;
+    currentValue: number;
+    pnl: number;
+    pnlPercent: number;
+    lotsCount: number;
+}
+
+export interface UnresolvedMarketStock {
+    investmentId: number;
+    name: string;
+}
+
+export interface MarketDataResponse {
+    source: string;
+    asOf: string;
+    marketOpen: boolean;
+    indices: MarketQuote[];
+    topGainers: MarketQuote[];
+    topLosers: MarketQuote[];
+    investedStocks: InvestedMarketQuote[];
+    unresolvedStocks: UnresolvedMarketStock[];
+}
+
+export interface IndianStockOption {
+    symbol: string;
+    name: string;
+    display: string;
+}
+
 export interface Notification {
     id?: string;
     title: string;

@@ -2,9 +2,11 @@ package com.expensify.backend.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import org.hibernate.annotations.CreationTimestamp;
 import jakarta.persistence.*;
 import lombok.*;
 import java.math.BigDecimal;
+import java.time.Instant;
 
 @Entity
 @Table(name = "investments")
@@ -33,4 +35,8 @@ public class Investment {
     private BigDecimal amount;
 
     private BigDecimal returnPct; // optional return percentage
+
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private Instant createdAt;
 }

@@ -103,6 +103,18 @@ public class ExpenseController {
                 "monthlyExpenses", expenseService.getMonthlyExpenses(user)));
     }
 
+    @GetMapping("/market")
+    public ResponseEntity<Map<String, Object>> getMarketData(Principal principal) {
+        User user = userRepository.findByEmail(principal.getName()).orElseThrow();
+        return ResponseEntity.ok(expenseService.getMarketData(user));
+    }
+
+    @GetMapping("/stocks/indian")
+    public ResponseEntity<List<Map<String, String>>> getIndianStocks(Principal principal) {
+        userRepository.findByEmail(principal.getName()).orElseThrow();
+        return ResponseEntity.ok(expenseService.getIndianStocks());
+    }
+
     @GetMapping("/subscriptions")
     public ResponseEntity<List<com.expensify.backend.model.Subscription>> getSubscriptions(Principal principal) {
         User user = userRepository.findByEmail(principal.getName()).orElseThrow();

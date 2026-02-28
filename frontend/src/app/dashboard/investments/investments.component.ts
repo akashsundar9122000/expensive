@@ -1,11 +1,12 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ExpenseService } from '../../services/expense.service';
-import { Investment, Sip, DashboardStats, User, Bank } from '../../services/models';
+import { Investment, Sip, DashboardStats, User, Bank, IndianStockOption } from '../../services/models';
 import { BehaviorSubject, Observable, combineLatest, map } from 'rxjs';
 import { SidebarComponent } from '../../shared/sidebar/sidebar.component';
 import { FormsModule } from '@angular/forms';
 import { DeleteConfirmModalComponent } from '../../shared/delete-confirm-modal/delete-confirm-modal.component';
+import { RouterLink } from '@angular/router';
 
 const INVESTMENT_TYPES = [
   { value: 'Mutual Fund', icon: 'ph-chart-pie', color: '#8B5CF6', bg: 'rgba(139,92,246,0.1)' },
@@ -62,7 +63,7 @@ const DEFAULT_NEW_SIP: SipForm = {
 @Component({
   selector: 'app-investments',
   standalone: true,
-  imports: [CommonModule, SidebarComponent, FormsModule, DeleteConfirmModalComponent],
+  imports: [CommonModule, SidebarComponent, FormsModule, DeleteConfirmModalComponent, RouterLink],
   template: `
     <main class="dashboard-layout" *ngIf="{
       user: user$ | async,
@@ -85,6 +86,9 @@ const DEFAULT_NEW_SIP: SipForm = {
             <p>Grow your wealth with smart tracking</p>
           </div>
           <div class="header-right">
+            <a routerLink="/stock-details" class="outline-btn add-btn stock-details-btn">
+              <i class="ph ph-chart-line-up"></i> <span class="btn-label">Stock Details</span>
+            </a>
             <button class="primary-btn add-btn" (click)="openAddModal()">
               <i class="ph ph-plus"></i> <span class="btn-label">Add Investment</span>
             </button>
@@ -262,21 +266,55 @@ const DEFAULT_NEW_SIP: SipForm = {
 
         <div class="form-group">
           <label>Investment</label>
-          <select [(ngModel)]="newInvestment.type">
+          <select [(ngModel)]="newInvestment.type" (ngModelChange)="onInvestmentTypeChange($event)">
             <option *ngFor="let t of investmentTypes" [value]="t.value">{{ t.value }}</option>
           </select>
         </div>
 
-        <div class="form-group">
+        <div class="form-group" *ngIf="newInvestment.type !== 'Stock'">
           <label>Name / Description</label>
           <input type="text" [(ngModel)]="newInvestment.name" placeholder="e.g. Nifty 50 Index Fund">
+        </div>
+
+        <div class="form-group" *ngIf="newInvestment.type === 'Stock'">
+          <label>Select Indian Stock (NSE)</label>
+          <div class="stock-picker">
+            <div class="stock-picker-input-wrap" [class.open]="showStockDropdown && isStockInputFocused">
+              <input
+                type="text"
+                [(ngModel)]="newInvestment.name"
+                placeholder="Select stock (symbol or name)"
+                (focus)="openStockDropdown()"
+                (blur)="onStockInputBlur()"
+                (ngModelChange)="onStockInputChange()"
+              >
+              <i class="ph ph-caret-down stock-picker-caret"></i>
+            </div>
+            <div class="stock-dropdown" *ngIf="showStockDropdown && isStockInputFocused">
+              <button
+                type="button"
+                class="stock-option"
+                *ngFor="let stock of filteredIndianStockOptions"
+                (mousedown)="selectStockOption(stock, $event)">
+                <span class="stock-option-symbol">{{ stock.symbol }}</span>
+                <span class="stock-option-name">{{ stock.name }}</span>
+              </button>
+              <div class="stock-empty" *ngIf="filteredIndianStockOptions.length === 0">
+                No stocks found for "{{ newInvestment.name || 'search' }}"
+              </div>
+            </div>
+          </div>
+          <div class="stock-hint" *ngIf="isIndianStocksLoading">Loading Indian stock list...</div>
+          <div class="stock-hint" *ngIf="!isIndianStocksLoading && indianStockOptions.length > 0">
+            {{ indianStockOptions.length | number:'1.0-0' }} Indian stocks loaded.
+          </div>
         </div>
         <div class="modal-grid-2">
           <div class="form-group">
             <label>Amount (₹)</label>
             <input type="number" [(ngModel)]="newInvestment.amount" placeholder="0">
           </div>
-          <div class="form-group">
+          <div class="form-group" *ngIf="newInvestment.type !== 'Stock'">
             <label>Returns % (optional)</label>
             <input type="number" [(ngModel)]="newInvestment.returnPct" placeholder="e.g. 12.5">
           </div>
@@ -395,6 +433,171 @@ const DEFAULT_NEW_SIP: SipForm = {
       min-width: 140px;
     }
 
+    .stock-details-btn {
+      text-decoration: none;
+    }
+
+    .market-card { padding: 24px; margin-bottom: 20px; }
+    .market-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 18px; }
+    .market-header-actions { display: flex; align-items: center; gap: 8px; }
+    .market-header p { margin: 4px 0 0; font-size: 12px; color: var(--text-muted); }
+    .market-title-row { display: flex; align-items: center; gap: 10px; }
+    .market-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 20px;
+      line-height: 1;
+    }
+    .market-status-badge.market-open {
+      background: rgba(16, 185, 129, 0.12);
+      color: #10B981;
+      border: 1px solid rgba(16, 185, 129, 0.25);
+    }
+    .market-status-badge.market-closed {
+      background: rgba(100, 116, 139, 0.1);
+      color: var(--text-muted);
+      border: 1px solid var(--border-light);
+    }
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+      flex-shrink: 0;
+    }
+    .market-open .status-dot { animation: pulse-dot 1.5s ease-in-out infinite; }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .market-updated { font-size: 12px; color: var(--text-muted); }
+    .market-refresh-btn {
+      border: 1px solid var(--border-light);
+      background: var(--bg-main);
+      color: var(--text-dark);
+      border-radius: 10px;
+      padding: 6px 10px;
+      font-size: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .market-refresh-btn:hover { background: var(--bg-hover); }
+    .market-refresh-btn:disabled { opacity: 0.65; cursor: not-allowed; }
+    .index-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+    .index-item { border: 1px solid var(--border-light); border-radius: 12px; padding: 12px; background: var(--bg-main); }
+    .index-name-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .index-name { font-size: 12px; color: var(--text-muted); }
+    .index-value { font-size: 20px; font-weight: 700; color: var(--text-dark); margin: 4px 0; }
+    .market-move { font-size: 12px; font-weight: 600; }
+    .positive { color: var(--success-green); }
+    .negative { color: var(--danger-red); }
+    .gainers-losers-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+    .market-list-card { border: 1px solid var(--border-light); border-radius: 12px; padding: 12px; background: var(--bg-main); }
+    .market-list-card h4 { margin-bottom: 10px; font-size: 14px; }
+    .market-row { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-light); }
+    .market-row:last-child { border-bottom: none; }
+    .row-name { min-width: 0; display: flex; flex-direction: column; }
+    .row-name strong { font-size: 12px; color: var(--text-dark); }
+    .row-name span { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+    .row-metrics { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-dark); }
+    .market-badge {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      border: 1px solid var(--border-light);
+      background: var(--bg-chip);
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+    .market-empty { font-size: 12px; color: var(--text-muted); padding: 6px 0 2px; }
+    .market-note { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
+    .stock-hint { margin-top: 6px; font-size: 11px; color: var(--text-muted); }
+    .stock-picker { position: relative; }
+    .stock-picker-input-wrap {
+      position: relative;
+      border: 1px solid var(--border-light);
+      border-radius: 12px;
+      background: var(--bg-main);
+      transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    }
+    .stock-picker-input-wrap.open {
+      border-color: var(--primary-blue);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+    }
+    .stock-picker-input-wrap input {
+      width: 100%;
+      border: none;
+      background: transparent;
+      color: var(--text-dark);
+      font-size: 13px;
+      padding: 10px 34px 10px 12px;
+      border-radius: 12px;
+    }
+    .stock-picker-input-wrap input:focus {
+      outline: none;
+    }
+    .stock-picker-caret {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 14px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .stock-dropdown {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      max-height: 260px;
+      overflow-y: auto;
+      border: 1px solid var(--border-light);
+      background: var(--bg-card);
+      border-radius: 12px;
+      z-index: 20;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+    }
+    .stock-option {
+      width: 100%;
+      border: none;
+      border-bottom: 1px solid var(--border-light);
+      background: transparent;
+      color: var(--text-dark);
+      text-align: left;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+    }
+    .stock-option:last-child { border-bottom: none; }
+    .stock-option:hover { background: var(--bg-hover); }
+    .stock-option-symbol {
+      font-size: 12px;
+      font-weight: 700;
+      min-width: 86px;
+      color: var(--text-dark);
+    }
+    .stock-option-name {
+      font-size: 12px;
+      color: var(--text-main);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .stock-empty {
+      padding: 10px 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
     .category-breakdown { display: flex; flex-direction: column; gap: 16px; }
     .category-row { display: flex; align-items: center; gap: 16px; }
     .cat-info { display: flex; align-items: center; gap: 10px; width: 120px; font-weight: 500; font-size: 13px; color: var(--text-dark); }
@@ -430,6 +633,15 @@ const DEFAULT_NEW_SIP: SipForm = {
           gap: 10px;
         }
 
+        .market-header {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .market-header-actions {
+          justify-content: space-between;
+        }
+
         .top-type {
           flex-wrap: wrap;
           justify-content: flex-end;
@@ -462,6 +674,11 @@ const DEFAULT_NEW_SIP: SipForm = {
         }
 
         .filter-bar {
+          grid-template-columns: 1fr;
+        }
+
+        .index-grid,
+        .gainers-losers-grid {
           grid-template-columns: 1fr;
         }
 
@@ -578,6 +795,11 @@ export class InvestmentsComponent implements OnInit {
   currentBanks: Bank[] = [];
   newInvestment: InvestmentForm = { ...DEFAULT_NEW_INVESTMENT };
   newSip: SipForm = { ...DEFAULT_NEW_SIP };
+  indianStockOptions: IndianStockOption[] = [];
+  filteredIndianStockOptions: IndianStockOption[] = [];
+  isIndianStocksLoading = false;
+  showStockDropdown = false;
+  isStockInputFocused = false;
 
   searchTerm = '';
   selectedType = 'All';
@@ -603,6 +825,8 @@ export class InvestmentsComponent implements OnInit {
         this.newSip.bankName = this.currentBanks[0].name;
       }
     });
+
+    this.loadIndianStockOptions();
 
     this.filteredInvestments$ = combineLatest([
       this.investments$,
@@ -655,14 +879,99 @@ export class InvestmentsComponent implements OnInit {
   }
 
   canSaveInvestment(): boolean {
-    const name = (this.newInvestment.name || '').trim();
+    const name = this.getNormalizedInvestmentName();
     const amount = Number(this.newInvestment.amount);
     return !!this.newInvestment.type && !!name && Number.isFinite(amount) && amount > 0;
+  }
+
+  onInvestmentTypeChange(type: string) {
+    if (type === 'Stock') {
+      this.newInvestment.name = '';
+      this.newInvestment.returnPct = null;
+      this.filteredIndianStockOptions = this.indianStockOptions;
+      this.showStockDropdown = false;
+      this.isStockInputFocused = false;
+      if (this.indianStockOptions.length === 0 && !this.isIndianStocksLoading) {
+        this.loadIndianStockOptions();
+      }
+      return;
+    }
+
+    if (this.newInvestment.name && this.newInvestment.name.includes(' - ')) {
+      this.newInvestment.name = this.newInvestment.name.split(' - ')[0].trim();
+    }
+  }
+
+  onStockInputChange() {
+    this.filterIndianStocks(this.newInvestment.name || '');
+    this.showStockDropdown = this.isStockInputFocused;
+  }
+
+  openStockDropdown() {
+    if (this.newInvestment.type !== 'Stock') {
+      return;
+    }
+    this.isStockInputFocused = true;
+    this.filterIndianStocks(this.newInvestment.name || '');
+    this.showStockDropdown = true;
+  }
+
+  onStockInputBlur() {
+    setTimeout(() => {
+      this.showStockDropdown = false;
+      this.isStockInputFocused = false;
+    }, 120);
+  }
+
+  selectStockOption(stock: IndianStockOption, event: MouseEvent) {
+    event.preventDefault();
+    this.newInvestment.name = `${stock.symbol} - ${stock.name}`;
+    this.filterIndianStocks(stock.symbol);
+    this.showStockDropdown = false;
+    this.isStockInputFocused = false;
+  }
+
+  private loadIndianStockOptions() {
+    this.isIndianStocksLoading = true;
+    this.expenseService.getIndianStocks().subscribe({
+      next: (stocks) => {
+        this.indianStockOptions = Array.isArray(stocks) ? stocks : [];
+        this.filteredIndianStockOptions = this.indianStockOptions;
+        this.isIndianStocksLoading = false;
+      },
+      error: (err) => {
+        console.error('Failed to load Indian stocks:', err);
+        this.indianStockOptions = [];
+        this.filteredIndianStockOptions = [];
+        this.isIndianStocksLoading = false;
+      }
+    });
+  }
+
+  private filterIndianStocks(query: string) {
+    const term = String(query || '').trim().toLowerCase();
+    if (!term) {
+      this.filteredIndianStockOptions = this.indianStockOptions;
+      return;
+    }
+
+    this.filteredIndianStockOptions = this.indianStockOptions.filter((stock) => {
+      const symbol = String(stock.symbol || '').toLowerCase();
+      const name = String(stock.name || '').toLowerCase();
+      const display = String(stock.display || '').toLowerCase();
+      return symbol.includes(term) || name.includes(term) || display.includes(term);
+    });
   }
 
   openAddModal() {
     this.editingInvestmentId = null;
     this.newInvestment = { ...DEFAULT_NEW_INVESTMENT };
+    this.showStockDropdown = false;
+    this.isStockInputFocused = false;
+    if (this.newInvestment.type === 'Stock' && this.indianStockOptions.length === 0) {
+      this.loadIndianStockOptions();
+    }
+    this.filterIndianStocks('');
     this.showModal = true;
   }
 
@@ -670,10 +979,16 @@ export class InvestmentsComponent implements OnInit {
     this.editingInvestmentId = investment.id;
     this.newInvestment = {
       type: investment.type,
-      name: investment.name,
+      name: investment.type === 'Stock' ? investment.name : investment.name,
       amount: Number(investment.amount || 0),
       returnPct: investment.returnPct === undefined || investment.returnPct === null ? null : Number(investment.returnPct)
     };
+    this.showStockDropdown = false;
+    this.isStockInputFocused = false;
+    if (this.newInvestment.type === 'Stock' && this.indianStockOptions.length === 0) {
+      this.loadIndianStockOptions();
+    }
+    this.filterIndianStocks(this.newInvestment.type === 'Stock' ? this.newInvestment.name : '');
     this.showModal = true;
   }
 
@@ -682,6 +997,9 @@ export class InvestmentsComponent implements OnInit {
     this.isSaving = false;
     this.editingInvestmentId = null;
     this.newInvestment = { ...DEFAULT_NEW_INVESTMENT };
+    this.showStockDropdown = false;
+    this.isStockInputFocused = false;
+    this.filterIndianStocks('');
   }
 
   canSaveSip(): boolean {
@@ -740,14 +1058,62 @@ export class InvestmentsComponent implements OnInit {
   }
 
   private toInvestmentPayload() {
+    const shouldSendReturnPct = this.newInvestment.type !== 'Stock';
     return {
       type: this.newInvestment.type,
-      name: (this.newInvestment.name || '').trim(),
+      name: this.getNormalizedInvestmentName(),
       amount: Number(this.newInvestment.amount),
-      returnPct: this.newInvestment.returnPct === null || this.newInvestment.returnPct === undefined || this.newInvestment.returnPct === ('' as any)
+      returnPct: !shouldSendReturnPct || this.newInvestment.returnPct === null || this.newInvestment.returnPct === undefined || this.newInvestment.returnPct === ('' as any)
         ? undefined
         : Number(this.newInvestment.returnPct)
     };
+  }
+
+  private getNormalizedInvestmentName(): string {
+    const raw = (this.newInvestment.name || '').trim();
+    if (this.newInvestment.type !== 'Stock') {
+      return raw;
+    }
+
+    const resolved = this.resolveStockFromInput(raw);
+    if (!resolved) {
+      return '';
+    }
+
+    return `${resolved.symbol} - ${resolved.name}`;
+  }
+
+  private extractStockSymbol(value: string): string {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+
+    const fromDash = raw.split(' - ')[0].trim();
+    const fromBracket = fromDash.replace(/[()]/g, '').trim();
+    return fromBracket.toUpperCase();
+  }
+
+  private resolveStockFromInput(value: string): IndianStockOption | null {
+    const raw = String(value || '').trim();
+    if (!raw) {
+      return null;
+    }
+
+    const symbol = this.extractStockSymbol(raw);
+    const bySymbol = this.indianStockOptions.find((stock) => stock.symbol.toUpperCase() === symbol.toUpperCase());
+    if (bySymbol) {
+      return bySymbol;
+    }
+
+    const lower = raw.toLowerCase();
+    const byName = this.indianStockOptions.find((stock) => stock.name.toLowerCase() === lower);
+    if (byName) {
+      return byName;
+    }
+
+    const byContains = this.indianStockOptions.find((stock) =>
+      stock.symbol.toLowerCase().includes(lower) || stock.name.toLowerCase().includes(lower)
+    );
+    return byContains || null;
   }
 
   saveInvestment() {

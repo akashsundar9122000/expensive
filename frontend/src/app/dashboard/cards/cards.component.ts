@@ -754,7 +754,7 @@ export class CardsComponent implements OnInit, OnDestroy {
 
   savedCards: SavedCreditCard[] = [];
   private readonly cardStoragePrefix = 'saved-cards:';
-  private currentUserEmail = 'guest';
+  private currentUserEmail: string | null = null;
   private userSubscription?: Subscription;
   private cvvHideTimers: Record<number, ReturnType<typeof setTimeout>> = {};
 
@@ -796,8 +796,21 @@ export class CardsComponent implements OnInit, OnDestroy {
     this.stats$ = this.expenseService.getStats();
     this.banks$ = this.expenseService.getBanks();
 
+    const loggedInEmail = this.normalizeEmail(this.authService.currentUserValue?.email);
+    if (loggedInEmail) {
+      this.currentUserEmail = loggedInEmail;
+      this.migrateGuestCardsIfNeeded(loggedInEmail);
+      this.loadSavedCards();
+    }
+
     this.userSubscription = this.user$.subscribe((user) => {
-      this.currentUserEmail = (user?.email || 'guest').toLowerCase();
+      const nextEmail = this.normalizeEmail(user?.email) || this.normalizeEmail(this.authService.currentUserValue?.email);
+      if (!nextEmail || nextEmail === this.currentUserEmail) {
+        return;
+      }
+
+      this.currentUserEmail = nextEmail;
+      this.migrateGuestCardsIfNeeded(nextEmail);
       this.loadSavedCards();
     });
   }
@@ -988,10 +1001,71 @@ export class CardsComponent implements OnInit, OnDestroy {
   }
 
   private storageKey(): string {
-    return `${this.cardStoragePrefix}${this.currentUserEmail}`;
+    return `${this.cardStoragePrefix}${this.currentUserEmail ?? ''}`;
+  }
+
+  private normalizeEmail(email?: string | null): string {
+    return String(email || '').trim().toLowerCase();
+  }
+
+  private migrateGuestCardsIfNeeded(userEmail: string): void {
+    if (!userEmail) {
+      return;
+    }
+
+    const guestKey = `${this.cardStoragePrefix}guest`;
+    const userKey = `${this.cardStoragePrefix}${userEmail}`;
+    const migrationFlagKey = `${this.cardStoragePrefix}migrated:${userEmail}`;
+
+    try {
+      if (localStorage.getItem(migrationFlagKey) === '1') {
+        return;
+      }
+
+      const rawGuest = localStorage.getItem(guestKey);
+      if (!rawGuest) {
+        localStorage.setItem(migrationFlagKey, '1');
+        return;
+      }
+
+      const guestCards = JSON.parse(rawGuest) as SavedCreditCard[];
+      if (!Array.isArray(guestCards) || guestCards.length === 0) {
+        localStorage.removeItem(guestKey);
+        localStorage.setItem(migrationFlagKey, '1');
+        return;
+      }
+
+      const rawUser = localStorage.getItem(userKey);
+      const userCards = rawUser ? (JSON.parse(rawUser) as SavedCreditCard[]) : [];
+      const existingCards = Array.isArray(userCards) ? userCards : [];
+
+      const fingerprint = (card: SavedCreditCard) => `${card.bankName}|${card.cardName}|${card.cardNumber}|${card.expiry}`;
+      const existingFingerprints = new Set(existingCards.map((card) => fingerprint(card)));
+      const mergedCards = [...existingCards];
+
+      for (const guestCard of guestCards) {
+        const key = fingerprint(guestCard);
+        if (!existingFingerprints.has(key)) {
+          mergedCards.push(guestCard);
+          existingFingerprints.add(key);
+        }
+      }
+
+      localStorage.setItem(userKey, JSON.stringify(mergedCards));
+      localStorage.removeItem(guestKey);
+      localStorage.setItem(migrationFlagKey, '1');
+    } catch {
+      // Ignore migration issues and continue with normal flow.
+    }
   }
 
   private loadSavedCards() {
+    if (!this.currentUserEmail) {
+      this.savedCards = [];
+      this.selectedBankFilter = 'ALL';
+      return;
+    }
+
     try {
       const raw = localStorage.getItem(this.storageKey());
       const parsed = raw ? JSON.parse(raw) : [];
@@ -1012,6 +1086,9 @@ export class CardsComponent implements OnInit, OnDestroy {
   }
 
   private persistSavedCards() {
+    if (!this.currentUserEmail) {
+      return;
+    }
     localStorage.setItem(this.storageKey(), JSON.stringify(this.savedCards));
   }
 

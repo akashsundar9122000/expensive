@@ -6,6 +6,7 @@ import { AllExpensesComponent } from './dashboard/all-expenses/all-expenses.comp
 import { GoalsComponent } from './dashboard/goals/goals.component';
 import { SubscriptionsComponent } from './dashboard/subscriptions/subscriptions.component';
 import { InvestmentsComponent } from './dashboard/investments/investments.component';
+import { StockDetailsComponent } from './dashboard/stock-details/stock-details.component';
 import { CardsComponent } from './dashboard/cards/cards.component';
 import { SettingsComponent } from './dashboard/settings/settings.component';
 import { authGuard } from './services/auth.guard';
@@ -36,6 +37,11 @@ export const routes: Routes = [
     {
         path: 'investments',
         component: InvestmentsComponent,
+        canActivate: [authGuard]
+    },
+    {
+        path: 'stock-details',
+        component: StockDetailsComponent,
         canActivate: [authGuard]
     },
     {
